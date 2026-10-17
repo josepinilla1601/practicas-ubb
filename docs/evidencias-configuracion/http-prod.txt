@@ -1,0 +1,8 @@
+GET /: HTTP 200, 1310 bytes
+GET /app.js: HTTP 200, 14937 bytes
+GET /styles.css: HTTP 200, 7188 bytes
+GET /api/resumen: HTTP 200, 58 bytes
+GET /api/estudiantes: HTTP 200, 2 bytes
+GET /api/centros: HTTP 200, 2 bytes
+GET /api/practicas: HTTP 200, 2 bytes
+GET /api/asignaturas: HTTP 200, 631 bytes

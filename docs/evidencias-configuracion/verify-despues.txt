@@ -1,0 +1,80 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ------------------------< cl.ubb:practicas-ubb >------------------------
+[INFO] Building Seguimiento de Practicas UBB 1.0.0
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.4.1:clean (default-clean) @ practicas-ubb ---
+[INFO] Deleting /workspace/scratch/1bcbaba66450/tmp/lab/ejecucion/target
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ practicas-ubb ---
+[INFO] Copying 3 resources from src/main/resources to target/classes
+[INFO] Copying 5 resources from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.14.1:compile (default-compile) @ practicas-ubb ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 6 source files with javac [debug parameters release 21] to target/classes
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ practicas-ubb ---
+[INFO] Copying 1 resource from src/test/resources to target/test-classes
+[INFO] 
+[INFO] --- compiler:3.14.1:testCompile (default-testCompile) @ practicas-ubb ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 2 source files with javac [debug parameters release 21] to target/test-classes
+[INFO] 
+[INFO] --- surefire:3.5.6:test (default-test) @ practicas-ubb ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running cl.ubb.practicas.PracticasIntegrationTest
+20:49:08.235 [main] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [cl.ubb.practicas.PracticasIntegrationTest]: PracticasIntegrationTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+20:49:08.326 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration cl.ubb.practicas.PracticasApplication for test class cl.ubb.practicas.PracticasIntegrationTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::               (v3.5.16)
+
+2026-10-16T20:49:08.660-06:00  INFO 503 --- [practicas-ubb] [           main] c.u.practicas.PracticasIntegrationTest   : Starting PracticasIntegrationTest using Java 21.0.12.1 with PID 503 (started by root in /workspace/scratch/1bcbaba66450/tmp/lab/ejecucion)
+2026-10-16T20:49:08.661-06:00  INFO 503 --- [practicas-ubb] [           main] c.u.practicas.PracticasIntegrationTest   : The following 1 profile is active: "test"
+2026-10-16T20:49:09.354-06:00  INFO 503 --- [practicas-ubb] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-10-16T20:49:09.496-06:00  INFO 503 --- [practicas-ubb] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection com.mysql.cj.jdbc.ConnectionImpl@73e776b7
+2026-10-16T20:49:09.498-06:00  INFO 503 --- [practicas-ubb] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-10-16T20:49:09.545-06:00  INFO 503 --- [practicas-ubb] [           main] org.flywaydb.core.FlywayExecutor         : Database: jdbc:mysql://127.0.0.1:3307/practicas_ubb_test?serverTimezone=UTC&allowPublicKeyRetrieval=true&sslMode=DISABLED (MySQL 8.4)
+2026-10-16T20:49:09.644-06:00  WARN 503 --- [practicas-ubb] [           main] o.f.c.internal.database.base.Database    : Flyway upgrade recommended: MySQL 8.4 is newer than this version of Flyway and support has not been tested. The latest supported version of MySQL is 8.1.
+2026-10-16T20:49:09.684-06:00  INFO 503 --- [practicas-ubb] [           main] o.f.core.internal.command.DbValidate     : Successfully validated 2 migrations (execution time 00:00.029s)
+2026-10-16T20:49:09.695-06:00  INFO 503 --- [practicas-ubb] [           main] o.f.core.internal.command.DbMigrate      : Current version of schema `practicas_ubb_test`: 2
+2026-10-16T20:49:09.698-06:00  INFO 503 --- [practicas-ubb] [           main] o.f.core.internal.command.DbMigrate      : Schema `practicas_ubb_test` is up to date. No migration necessary.
+2026-10-16T20:49:09.866-06:00  INFO 503 --- [practicas-ubb] [           main] o.s.b.a.w.s.WelcomePageHandlerMapping    : Adding welcome page: class path resource [static/index.html]
+2026-10-16T20:49:10.070-06:00  INFO 503 --- [practicas-ubb] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-10-16T20:49:10.071-06:00  INFO 503 --- [practicas-ubb] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-10-16T20:49:10.072-06:00  INFO 503 --- [practicas-ubb] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-10-16T20:49:10.087-06:00  INFO 503 --- [practicas-ubb] [           main] c.u.practicas.PracticasIntegrationTest   : Started PracticasIntegrationTest in 1.657 seconds (process running for 2.341)
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.478 s -- in cl.ubb.practicas.PracticasIntegrationTest
+[INFO] Running cl.ubb.practicas.SolicitudesTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.034 s -- in cl.ubb.practicas.SolicitudesTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jar:3.4.2:jar (default-jar) @ practicas-ubb ---
+[INFO] Building jar: /workspace/scratch/1bcbaba66450/tmp/lab/ejecucion/target/practicas-ubb-1.0.0.jar
+[INFO] 
+[INFO] --- spring-boot:3.5.16:repackage (repackage) @ practicas-ubb ---
+[INFO] Replacing main artifact /workspace/scratch/1bcbaba66450/tmp/lab/ejecucion/target/practicas-ubb-1.0.0.jar with repackaged archive, adding nested dependencies in BOOT-INF/.
+[INFO] The original artifact has been renamed to /workspace/scratch/1bcbaba66450/tmp/lab/ejecucion/target/practicas-ubb-1.0.0.jar.original
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  5.392 s
+[INFO] Finished at: 2026-10-16T20:49:11-06:00
+[INFO] ------------------------------------------------------------------------
