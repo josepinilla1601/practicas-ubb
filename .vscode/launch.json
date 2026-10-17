@@ -1,0 +1,12 @@
+{
+  "version": "0.2.0",
+  "configurations": [{
+    "type": "java",
+    "name": "Practicas UBB desarrollo",
+    "request": "launch",
+    "mainClass": "cl.ubb.practicas.PracticasApplication",
+    "cwd": "${workspaceFolder}",
+    "envFile": "${workspaceFolder}/.env",
+    "args": "--spring.profiles.active=dev"
+  }]
+}
