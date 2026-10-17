@@ -5,7 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -19,10 +19,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** Pruebas reales contra MySQL, exclusivamente en una base terminada en _test. */
 @SpringBootTest
 @AutoConfigureMockMvc
-@TestPropertySource(properties={
- "spring.datasource.url=${TEST_DB_URL:jdbc:mysql://127.0.0.1:3306/practicas_ubb_test?createDatabaseIfNotExist=true&serverTimezone=UTC&allowPublicKeyRetrieval=true&sslMode=DISABLED}",
- "spring.datasource.username=${TEST_DB_USER:root}","spring.datasource.password=${TEST_DB_PASSWORD:}"
-})
+@ActiveProfiles("test")
 class PracticasIntegrationTest {
  @Autowired MockMvc mvc;
  @Autowired JdbcTemplate db;

@@ -1,0 +1,5 @@
+Apache Maven 3.9.9 (8e8579a9e76f7d015ee5ec7bfcdc97d260186937)
+Maven home: /root/.m2/wrapper/dists/apache-maven-3.9.9/3477a4f1
+Java version: 21.0.12.1, vendor: Eclipse Adoptium, runtime: /workspace/scratch/1bcbaba66450/tmp/lab/runtime/jdk21
+Default locale: en, platform encoding: UTF-8
+OS name: "linux", version: "6.18.55", arch: "amd64", family: "unix"

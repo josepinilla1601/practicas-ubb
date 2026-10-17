@@ -1,0 +1,56 @@
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::               (v3.5.16)
+
+2026-10-16T20:50:39.713-06:00  INFO 50 --- [practicas-ubb] [           main] cl.ubb.practicas.PracticasApplication    : Starting PracticasApplication v1.0.0 using Java 21.0.12.1 with PID 50 (/workspace/scratch/1bcbaba66450/tmp/lab/ejecucion/target/practicas-ubb-1.0.0.jar started by root in /workspace/scratch/1bcbaba66450/tmp/lab/ejecucion)
+2026-10-16T20:50:39.715-06:00  INFO 50 --- [practicas-ubb] [           main] cl.ubb.practicas.PracticasApplication    : The following 1 profile is active: "dev"
+2026-10-16T20:50:40.646-06:00  INFO 50 --- [practicas-ubb] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8085 (http)
+2026-10-16T20:50:40.658-06:00  INFO 50 --- [practicas-ubb] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-10-16T20:50:40.658-06:00  INFO 50 --- [practicas-ubb] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.55]
+2026-10-16T20:50:40.680-06:00  INFO 50 --- [practicas-ubb] [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2026-10-16T20:50:40.682-06:00  INFO 50 --- [practicas-ubb] [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 918 ms
+2026-10-16T20:50:40.925-06:00  INFO 50 --- [practicas-ubb] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-10-16T20:50:41.114-06:00  INFO 50 --- [practicas-ubb] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection com.mysql.cj.jdbc.ConnectionImpl@5f8d9767
+2026-10-16T20:50:41.117-06:00  INFO 50 --- [practicas-ubb] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-10-16T20:50:41.170-06:00  INFO 50 --- [practicas-ubb] [           main] org.flywaydb.core.FlywayExecutor         : Database: jdbc:mysql://127.0.0.1:3307/practicas_ubb?serverTimezone=UTC&allowPublicKeyRetrieval=true&sslMode=DISABLED (MySQL 8.4)
+2026-10-16T20:50:41.274-06:00  WARN 50 --- [practicas-ubb] [           main] o.f.c.internal.database.base.Database    : Flyway upgrade recommended: MySQL 8.4 is newer than this version of Flyway and support has not been tested. The latest supported version of MySQL is 8.1.
+2026-10-16T20:50:41.321-06:00  INFO 50 --- [practicas-ubb] [           main] o.f.core.internal.command.DbValidate     : Successfully validated 2 migrations (execution time 00:00.037s)
+2026-10-16T20:50:41.335-06:00  INFO 50 --- [practicas-ubb] [           main] o.f.core.internal.command.DbMigrate      : Current version of schema `practicas_ubb`: 2
+2026-10-16T20:50:41.340-06:00  INFO 50 --- [practicas-ubb] [           main] o.f.core.internal.command.DbMigrate      : Schema `practicas_ubb` is up to date. No migration necessary.
+2026-10-16T20:50:41.477-06:00  INFO 50 --- [practicas-ubb] [           main] o.s.b.a.w.s.WelcomePageHandlerMapping    : Adding welcome page: class path resource [static/index.html]
+2026-10-16T20:50:41.745-06:00  INFO 50 --- [practicas-ubb] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8085 (http) with context path '/'
+2026-10-16T20:50:41.761-06:00  INFO 50 --- [practicas-ubb] [           main] cl.ubb.practicas.PracticasApplication    : Started PracticasApplication in 2.436 seconds (process running for 2.783)
+2026-10-16T20:50:42.020-06:00  INFO 50 --- [practicas-ubb] [0.1-8085-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-10-16T20:50:42.020-06:00  INFO 50 --- [practicas-ubb] [0.1-8085-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-10-16T20:50:42.021-06:00  INFO 50 --- [practicas-ubb] [0.1-8085-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
+2026-10-16T20:50:42.061-06:00 DEBUG 50 --- [practicas-ubb] [0.1-8085-exec-1] o.s.jdbc.core.JdbcTemplate               : Executing SQL query [SELECT COUNT(*) FROM estudiantes]
+2026-10-16T20:50:42.072-06:00 DEBUG 50 --- [practicas-ubb] [0.1-8085-exec-1] o.s.jdbc.core.JdbcTemplate               : Executing SQL query [SELECT COUNT(*) FROM centros]
+2026-10-16T20:50:42.074-06:00 DEBUG 50 --- [practicas-ubb] [0.1-8085-exec-1] o.s.jdbc.core.JdbcTemplate               : Executing SQL query [SELECT COUNT(*) FROM practicas]
+2026-10-16T20:50:42.075-06:00 DEBUG 50 --- [practicas-ubb] [0.1-8085-exec-1] o.s.jdbc.core.JdbcTemplate               : Executing SQL query [SELECT COUNT(*) FROM documentos]
+2026-10-16T20:50:42.122-06:00 DEBUG 50 --- [practicas-ubb] [0.1-8085-exec-6] o.s.jdbc.core.JdbcTemplate               : Executing SQL query [SELECT COUNT(*) FROM estudiantes]
+2026-10-16T20:50:42.123-06:00 DEBUG 50 --- [practicas-ubb] [0.1-8085-exec-6] o.s.jdbc.core.JdbcTemplate               : Executing SQL query [SELECT COUNT(*) FROM centros]
+2026-10-16T20:50:42.124-06:00 DEBUG 50 --- [practicas-ubb] [0.1-8085-exec-6] o.s.jdbc.core.JdbcTemplate               : Executing SQL query [SELECT COUNT(*) FROM practicas]
+2026-10-16T20:50:42.124-06:00 DEBUG 50 --- [practicas-ubb] [0.1-8085-exec-6] o.s.jdbc.core.JdbcTemplate               : Executing SQL query [SELECT COUNT(*) FROM documentos]
+2026-10-16T20:50:42.128-06:00 DEBUG 50 --- [practicas-ubb] [0.1-8085-exec-7] o.s.jdbc.core.JdbcTemplate               : Executing SQL query [SELECT id,identificador,nombres,apellidos,correo FROM estudiantes ORDER BY apellidos,nombres,id]
+2026-10-16T20:50:42.136-06:00 DEBUG 50 --- [practicas-ubb] [0.1-8085-exec-8] o.s.jdbc.core.JdbcTemplate               : Executing SQL query [SELECT * FROM centros ORDER BY nombre,id]
+2026-10-16T20:50:42.141-06:00 DEBUG 50 --- [practicas-ubb] [.1-8085-exec-10] o.s.jdbc.core.JdbcTemplate               : Executing SQL query [SELECT p.id,p.estudiante_id,p.asignatura_id,p.centro_id,p.profesor_responsable,
+  e.identificador,CONCAT(e.nombres,' ',e.apellidos) estudiante,
+  a.nombre asignatura,a.ciclo,a.requiere_centro,c.nombre centro,pe.anio,pe.semestre,
+  (SELECT COUNT(*) FROM requisitos_practica r WHERE r.practica_id=p.id) requeridos,
+  (SELECT COUNT(*) FROM requisitos_practica r WHERE r.practica_id=p.id
+   AND EXISTS(SELECT 1 FROM documentos d WHERE d.requisito_id=r.id)) recibidos
+FROM practicas p JOIN estudiantes e ON e.id=p.estudiante_id
+JOIN asignaturas a ON a.id=p.asignatura_id JOIN periodos pe ON pe.id=p.periodo_id
+LEFT JOIN centros c ON c.id=p.centro_id
+ ORDER BY p.id DESC]
+2026-10-16T20:50:42.148-06:00 DEBUG 50 --- [practicas-ubb] [0.1-8085-exec-2] o.s.jdbc.core.JdbcTemplate               : Executing SQL query [SELECT * FROM asignaturas ORDER BY id]
+2026-10-16T20:50:42.163-06:00  INFO 50 --- [practicas-ubb] [ionShutdownHook] o.s.b.w.e.tomcat.GracefulShutdown        : Commencing graceful shutdown. Waiting for active requests to complete
+2026-10-16T20:50:42.170-06:00  INFO 50 --- [practicas-ubb] [tomcat-shutdown] o.s.b.w.e.tomcat.GracefulShutdown        : Graceful shutdown complete
+2026-10-16T20:50:42.174-06:00  INFO 50 --- [practicas-ubb] [ionShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
+2026-10-16T20:50:42.177-06:00  INFO 50 --- [practicas-ubb] [ionShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.

@@ -1,0 +1,33 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ------------------------< cl.ubb:practicas-ubb >------------------------
+[INFO] Building Seguimiento de Practicas UBB 1.0.0
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- versions:2.18.0:display-dependency-updates (default-cli) @ practicas-ubb ---
+[INFO] The following dependencies in Dependencies have newer versions:
+[INFO]   com.mysql:mysql-connector-j .......................... 9.7.0 -> 26.7.0
+[INFO]   org.flywaydb:flyway-core ........................... 11.7.2 -> 13.10.3
+[INFO]   org.flywaydb:flyway-mysql .......................... 11.7.2 -> 13.10.3
+[INFO]   org.springframework.boot:spring-boot-starter-jdbc ...
+[INFO]                                                       3.5.16 -> 4.2.0-M2
+[INFO]   org.springframework.boot:spring-boot-starter-test ...
+[INFO]                                                       3.5.16 -> 4.2.0-M2
+[INFO]   org.springframework.boot:spring-boot-starter-validation ...
+[INFO]                                                       3.5.16 -> 4.2.0-M2
+[INFO]   org.springframework.boot:spring-boot-starter-web ...
+[INFO]                                                       3.5.16 -> 4.2.0-M2
+[INFO] 
+[INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-maven-plugin/maven-metadata.xml
+[INFO] Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-maven-plugin/maven-metadata.xml (11 kB at 1.7 kB/s)
+[INFO] The following dependencies in pluginManagement of plugins have newer versions:
+[INFO]   org.springframework.boot:spring-boot-maven-plugin ...
+[INFO]                                                       3.5.16 -> 4.2.0-M2
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  7.692 s
+[INFO] Finished at: 2026-10-16T20:50:37-06:00
+[INFO] ------------------------------------------------------------------------
