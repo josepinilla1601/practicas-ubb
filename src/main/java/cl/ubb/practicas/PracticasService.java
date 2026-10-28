@@ -14,7 +14,8 @@ import java.nio.charset.StandardCharsets;
 @Service
 public class PracticasService {
     private final JdbcTemplate db;
-    public PracticasService(JdbcTemplate db) { this.db=db; }
+    private final Acceso acceso;
+    public PracticasService(JdbcTemplate db,Acceso acceso) { this.db=db;this.acceso=acceso; }
     private static String clean(String x) { return x==null?"":x.strip(); }
     private long insert(String sql,Object... valores) {
         var key=new GeneratedKeyHolder();
@@ -24,21 +25,23 @@ public class PracticasService {
     private Map<String,Object> uno(String sql,String error,Object... args) {
         var rows=db.queryForList(sql,args); if(rows.isEmpty())throw Problema.noExiste(error); return rows.get(0);
     }
-    public List<Map<String,Object>> estudiantes() { return db.queryForList("SELECT id,identificador,nombres,apellidos,correo FROM estudiantes ORDER BY apellidos,nombres,id"); }
-    public Map<String,Object> estudiante(long id) { return uno("SELECT id,identificador,nombres,apellidos,correo FROM estudiantes WHERE id=?","El estudiante no existe.",id); }
+    public List<Map<String,Object>> estudiantes() { acceso.exigir("COORDINADOR");return db.queryForList("SELECT id,identificador,nombres,apellidos,correo FROM estudiantes ORDER BY apellidos,nombres,id"); }
+    public Map<String,Object> estudiante(long id) { acceso.exigir("COORDINADOR");return uno("SELECT id,identificador,nombres,apellidos,correo FROM estudiantes WHERE id=?","El estudiante no existe.",id); }
     public Map<String,Object> crearEstudiante(Solicitudes.Estudiante s) {
+        acceso.exigir("COORDINADOR");
         long id=insert("INSERT INTO estudiantes(identificador,nombres,apellidos,correo) VALUES(?,?,?,?)",clean(s.identificador()).toUpperCase(Locale.ROOT),clean(s.nombres()),clean(s.apellidos()),clean(s.correo()).toLowerCase(Locale.ROOT));
         return estudiante(id);
     }
-    public List<Map<String,Object>> centros() { return db.queryForList("SELECT * FROM centros ORDER BY nombre,id"); }
-    public Map<String,Object> centro(long id) { return uno("SELECT * FROM centros WHERE id=?","El centro no existe.",id); }
+    public List<Map<String,Object>> centros() { acceso.exigir("COORDINADOR");return db.queryForList("SELECT * FROM centros ORDER BY nombre,id"); }
+    public Map<String,Object> centro(long id) { acceso.exigir("COORDINADOR");return uno("SELECT * FROM centros WHERE id=?","El centro no existe.",id); }
     public Map<String,Object> crearCentro(Solicitudes.Centro s) {
+        acceso.exigir("COORDINADOR");
         long id=insert("INSERT INTO centros(nombre,comuna,direccion,contacto,correo,telefono) VALUES(?,?,?,?,?,?)",clean(s.nombre()),clean(s.comuna()),clean(s.direccion()),clean(s.contacto()),clean(s.correo()),clean(s.telefono()));
         return centro(id);
     }
     public List<Map<String,Object>> asignaturas() { return db.queryForList("SELECT * FROM asignaturas ORDER BY id"); }
     private static final String PRACTICAS="""
-        SELECT p.id,p.estudiante_id,p.asignatura_id,p.centro_id,p.profesor_responsable,
+        SELECT p.id,p.estudiante_id,p.asignatura_id,p.centro_id,p.profesor_responsable,p.profesor_ubb_id,p.profesor_colegio_id,
           e.identificador,CONCAT(e.nombres,' ',e.apellidos) estudiante,
           a.nombre asignatura,a.ciclo,a.requiere_centro,c.nombre centro,pe.anio,pe.semestre,
           (SELECT COUNT(*) FROM requisitos_practica r WHERE r.practica_id=p.id) requeridos,
@@ -48,10 +51,11 @@ public class PracticasService {
         JOIN asignaturas a ON a.id=p.asignatura_id JOIN periodos pe ON pe.id=p.periodo_id
         LEFT JOIN centros c ON c.id=p.centro_id
         """;
-    public List<Map<String,Object>> practicas() { return db.queryForList(PRACTICAS+" ORDER BY p.id DESC"); }
-    public Map<String,Object> practica(long id) { return uno(PRACTICAS+" WHERE p.id=?","La práctica no existe.",id); }
+    public List<Map<String,Object>> practicas() { var f=acceso.filtroPracticas();return db.queryForList(PRACTICAS+" WHERE "+f.sql()+" ORDER BY p.id DESC",f.args()); }
+    public Map<String,Object> practica(long id) { acceso.practica(id);return uno(PRACTICAS+" WHERE p.id=?","La práctica no existe.",id); }
     @Transactional
     public Map<String,Object> crearPractica(Solicitudes.Practica s) {
+        acceso.exigir("COORDINADOR");
         estudiante(s.estudianteId());
         var asignatura=uno("SELECT * FROM asignaturas WHERE id=?","La asignatura no existe.",s.asignaturaId());
         boolean necesita=Boolean.TRUE.equals(asignatura.get("requiere_centro")) || "1".equals(String.valueOf(asignatura.get("requiere_centro")));
@@ -82,6 +86,7 @@ public class PracticasService {
     }
     @Transactional
     public Map<String,Object> adjuntar(long practicaId,long requisitoId,MultipartFile archivo) throws IOException {
+        acceso.exigir("COORDINADOR","ESTUDIANTE");
         practica(practicaId);
         uno("SELECT id FROM requisitos_practica WHERE id=? AND practica_id=?","El requisito no pertenece a esta práctica.",requisitoId,practicaId);
         if(archivo.isEmpty())throw Problema.invalido("Selecciona un archivo con contenido.");
@@ -101,10 +106,17 @@ public class PracticasService {
     }
     public record Archivo(String nombre,String tipo,byte[] contenido) { }
     public Archivo descargar(long id) {
+        var relacion=uno("SELECT r.practica_id FROM documentos d JOIN requisitos_practica r ON r.id=d.requisito_id WHERE d.id=?","El documento no existe.",id);
+        acceso.practica(((Number)relacion.get("practica_id")).longValue());
         var rows=db.query("SELECT nombre_original,tipo_contenido,contenido FROM documentos WHERE id=?",(rs,n)->new Archivo(rs.getString(1),rs.getString(2),rs.getBytes(3)),id);
         if(rows.isEmpty())throw Problema.noExiste("El documento no existe.");return rows.get(0);
     }
     public Map<String,Object> resumen() {
+        if(!"COORDINADOR".equals(acceso.rol())) {
+            var f=acceso.filtroPracticas();
+            var r=db.queryForMap("SELECT COUNT(*) practicas,COUNT(DISTINCT p.estudiante_id) estudiantes,COUNT(DISTINCT p.centro_id) centros FROM practicas p WHERE "+f.sql(),f.args());
+            r.put("documentos",db.queryForObject("SELECT COUNT(*) FROM documentos d JOIN requisitos_practica r ON r.id=d.requisito_id JOIN practicas p ON p.id=r.practica_id WHERE "+f.sql(),Long.class,f.args()));return r;
+        }
         return Map.of("estudiantes",db.queryForObject("SELECT COUNT(*) FROM estudiantes",Long.class),
           "centros",db.queryForObject("SELECT COUNT(*) FROM centros",Long.class),
           "practicas",db.queryForObject("SELECT COUNT(*) FROM practicas",Long.class),
