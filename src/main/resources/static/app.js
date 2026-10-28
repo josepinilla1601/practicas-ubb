@@ -47,11 +47,49 @@ function onForm(selector, handler) {
   });
 }
 function registerPage(key,label,roles,render,bind=()=>{}) { pages[key]={label,roles,render,bind}; }
+// Secciones del menú lateral. Las páginas de la cuenta personal van en el menú de perfil, no aquí.
+const navGroups=[
+  ['Inicio',['mipanel','resumen','indicadores']],
+  ['Gestión académica',['practicas','estudiantes','centros','plantillas']],
+  ['Apoyo docente',['materiales','asistente']],
+  ['Administración',['usuarios']],
+];
+const accountPages=['cuenta'];
+const roleLabels={COORDINADOR:'Coordinación',PROFESOR_UBB:'Profesor UBB',PROFESOR_COLEGIO:'Profesor de colegio',ESTUDIANTE:'Estudiante'};
+// Iniciales para el avatar, sin contar palabras cortas como "de" o "la".
+const initials=name=>{const words=String(name||'').trim().split(/\s+/).filter(Boolean);const main=words.filter(w=>w.length>2);return (main.length?main:words).slice(0,2).map(w=>w[0]).join('').toUpperCase();};
+function visibleInNav(key) {
+  const page=pages[key];
+  if(!page || !page.label || accountPages.includes(key) || !role(...page.roles))return false;
+  // El estudiante tiene su propio panel de inicio; la vista general es para docentes y coordinación.
+  return !(key==='resumen' && role('ESTUDIANTE') && pages.mipanel);
+}
 function renderNav() {
-  $('nav').innerHTML=Object.entries(pages).filter(([key,page])=>page.label && role(...page.roles))
-    .map(([key,page])=>`<button data-page="${key}" class="${key===state.page?'active':''}">${e(page.label)}</button>`).join('');
-  $('#identity').textContent=state.usuario ? `${state.usuario.nombre} · ${state.usuario.rol.replaceAll('_',' ')}` : '';
-  $('#logout').hidden=!state.usuario;
+  const listed=new Set(navGroups.flatMap(([,keys])=>keys));
+  const extra=Object.keys(pages).filter(key=>!listed.has(key));
+  const groups=navGroups.map(([title,keys],i)=>[title,i===0?keys.concat(extra):keys]);
+  $('nav').innerHTML=groups.map(([title,keys])=>{
+    const items=keys.filter(visibleInNav);
+    if(!items.length)return '';
+    return `<div class="nav-group"><div class="nav-label">${e(title)}</div>${items.map(key=>`<button data-page="${key}" class="${key===state.page?'active':''}" ${key===state.page?'aria-current="page"':''}>${e(pages[key].label)}</button>`).join('')}</div>`;
+  }).join('');
+  const u=state.usuario;
+  $('#profile').hidden=!u;
+  if(!u){closeProfileMenu();return;}
+  $('#avatar').textContent=initials(u.nombre);
+  $('#identity').textContent=u.nombre;
+  $('#role-label').textContent=roleLabels[u.rol]||u.rol;
+  $('#menu-name').textContent=u.nombre;
+  $('#menu-email').textContent=u.correo;
+}
+function closeProfileMenu() {
+  const menu=$('#profile-menu');if(!menu)return;
+  menu.hidden=true;$('#profile-button').setAttribute('aria-expanded','false');
+}
+function toggleProfileMenu() {
+  const menu=$('#profile-menu');const open=menu.hidden;
+  menu.hidden=!open;$('#profile-button').setAttribute('aria-expanded',String(open));
+  if(open)menu.querySelector('[role="menuitem"]').focus();
 }
 async function refreshSession() { Object.assign(state,await api('/sesion')); }
 async function load() {
@@ -71,7 +109,7 @@ async function go(page,id) {
 }
 async function saved(page,id) { await load();await go(page,id);notice('Información guardada correctamente.'); }
 function renderLogin() {
-  navigation++;document.body.classList.add('signed-out');$('nav').innerHTML='';$('#identity').textContent='';$('#logout').hidden=true;
+  navigation++;document.body.classList.add('signed-out');$('nav').innerHTML='';$('#profile').hidden=true;closeProfileMenu();
   $('#app').innerHTML=heading('Bienvenido a Prácticas UBB','Ingresa con la cuenta asignada por la coordinación.')+
     card('Iniciar sesión',`<form id="login-form">${field('Correo','username','email')}${field('Contraseña','password','password',true,60)}${button('Ingresar','type="submit"')}<p class="hint">Si todavía no tienes cuenta, solicítala al coordinador.</p></form>`);
   onForm('#login-form',async form=>{
@@ -129,13 +167,19 @@ registerPage('detalle','',allRoles,async id=>{
   onForm('#upload-form',async form=>{const file=form.elements.archivo.files[0];if(!file || file.size>10*1024*1024)throw new Error('Selecciona un archivo de hasta 10 MB.');const body=new FormData();body.append('archivo',file);await api(`/practicas/${id}/requisitos/${form.elements.requisitoId.value}/documentos`,{method:'POST',body});await saved('detalle',id);});
   detailBindings.forEach(bind=>bind(id));
 });
-registerPage('cuenta','Mi contraseña',allRoles,()=>heading('Cambiar contraseña','Necesitas conocer tu contraseña actual.')+
+registerPage('cuenta','Cambiar contraseña',allRoles,()=>heading('Cambiar contraseña','Necesitas conocer tu contraseña actual.')+
   card('Credenciales',`<form id="password-form">${field('Contraseña actual','actual','password',true,60)}${field('Nueva contraseña (10–60 caracteres)','nueva','password',true,60)}${field('Confirmar nueva contraseña','confirmacion','password',true,60)}${button('Actualizar contraseña','type="submit"')}</form>`),()=>{
     $('#password-form').elements.nueva.autocomplete='new-password';$('#password-form').elements.confirmacion.autocomplete='new-password';
     onForm('#password-form',async form=>{const d=formData(form);if(d.nueva!==d.confirmacion)throw new Error('Las contraseñas nuevas no coinciden.');await send('/cuenta/clave',{actual:d.actual,nueva:d.nueva});form.reset();notice('Contraseña actualizada.');});
 });
+document.addEventListener('keydown',event=>{
+  if(event.key==='Escape' && !$('#profile-menu').hidden){closeProfileMenu();$('#profile-button').focus();}
+});
 document.addEventListener('click',async event=>{
+  if(!event.target.closest('#profile'))closeProfileMenu();
   const target=event.target.closest('button');if(!target)return;
+  if(target.id==='profile-button'){toggleProfileMenu();return;}
+  if(target.closest('#profile-menu'))closeProfileMenu();
   try {
     if(target.dataset.page){$('#notice').hidden=true;await go(target.dataset.page);}
     else if(target.dataset.detail){$('#notice').hidden=true;await go('detalle',target.dataset.detail);}

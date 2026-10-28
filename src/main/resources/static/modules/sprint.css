@@ -23,3 +23,38 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 @media(max-width:900px) { .chat-layout { grid-template-columns:1fr; } header { height:auto; min-height:76px; flex-wrap:wrap; gap:12px; padding:15px; } }
 #chat-messages { max-height:520px; overflow:auto; }
 .message .pill { margin-bottom:6px; }
+
+/* Menú lateral agrupado por secciones */
+nav { gap:2px; margin-top:28px; }
+.nav-group + .nav-group { margin-top:18px; }
+.nav-group .nav-label { margin:0 14px 6px; text-transform:uppercase; }
+nav button { display:block; width:100%; padding:10px 14px; }
+
+/* Menú de perfil en el encabezado */
+.profile { position:relative; }
+.profile-button { display:flex; align-items:center; gap:10px; border:1px solid var(--line); background:#fff; border-radius:30px; padding:4px 12px 4px 4px; color:var(--ink); text-align:left; }
+.profile-button:hover, .profile-button[aria-expanded="true"] { background:var(--pale); border-color:#c3ddd2; }
+.avatar { display:grid; place-items:center; width:32px; height:32px; border-radius:50%; background:#c4e8d7; color:#194c40; font-weight:700; font-size:12px; flex:none; }
+.profile-text { display:flex; flex-direction:column; line-height:1.25; }
+.profile-text b { font-size:12px; font-weight:600; }
+.profile-text small { font-size:10px; color:var(--muted); }
+.chevron { font-size:10px; color:var(--muted); }
+.profile-menu { position:absolute; right:0; top:calc(100% + 8px); min-width:230px; background:#fff; border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 30px rgba(23,49,59,.14); padding:6px; z-index:20; }
+.profile-menu-head { padding:10px 12px 12px; border-bottom:1px solid #edf1f1; margin-bottom:6px; }
+.profile-menu-head b { display:block; font-size:13px; color:var(--ink); }
+.profile-menu-head small { display:block; font-size:11px; color:var(--muted); overflow-wrap:anywhere; }
+.profile-menu button { display:block; width:100%; text-align:left; border:0; background:none; padding:9px 12px; border-radius:6px; font-size:13px; color:var(--ink); }
+.profile-menu button:hover, .profile-menu button:focus-visible { background:var(--bg); }
+.profile-menu .danger-item { color:var(--red); }
+
+/* Las preguntas sugeridas del asistente pueden ocupar varias líneas */
+.stack .button { white-space:normal; text-align:left; line-height:1.4; }
+
+@media(max-width:700px) {
+  .profile-text, .chevron { display:none; }
+  .profile-button { padding:3px; }
+  nav { margin-top:15px; }
+  .nav-group { display:contents; }
+  .nav-group .nav-label { display:none; }
+  nav button { width:auto; }
+}
