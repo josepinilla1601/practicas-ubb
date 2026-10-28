@@ -38,7 +38,7 @@ class PracticasIntegrationTest {
   @Autowired PasswordEncoder encoder;
  @BeforeEach void limpiarSoloBaseTest(){
   assertTrue(db.queryForObject("SELECT DATABASE()",String.class).endsWith("_test"),"Las pruebas necesitan una base exclusiva terminada en _test.");
-   for(String tabla:new String[]{"revisiones","documentos","requisitos_practica","practicas","usuarios","estudiantes","centros"})db.update("DELETE FROM "+tabla);
+   for(String tabla:new String[]{"evaluaciones_colegio","revisiones","documentos","requisitos_practica","practicas","usuarios","estudiantes","centros"})db.update("DELETE FROM "+tabla);
    db.update("INSERT INTO usuarios(correo,nombre,clave_hash,rol) VALUES('coordinacion@test.example','Pruebas','no-utilizada','COORDINADOR')");
    mvc=MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).defaultRequest(get("/").with(csrf())).build();
  }
@@ -186,6 +186,22 @@ class PracticasIntegrationTest {
    long d=subir(otra,requisito(otra),"x.pdf",pdf(),201).get("id").asLong();
    cuenta("revisor@test.example","PROFESOR_UBB",null);
    mvc.perform(post("/api/documentos/"+d+"/revision").with(user("revisor@test.example").roles("PROFESOR_UBB")).contentType("application/json").content("{\"decision\":\"APROBADO\"}")).andExpect(status().isNotFound());
+  }
+  @Test void s214EvaluacionColegioSoloPracticantesAsignados()throws Exception{
+   long p=practica("EVAL-1","INT1",2026),otra=practica("EVAL-2","INT1",2026);
+   long ubb=cuenta("ubb@test.example","PROFESOR_UBB",null),colegio=cuenta("colegio@test.example","PROFESOR_COLEGIO",null);
+   long estudiante=db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,p);
+   cuenta("evaluado@test.example","ESTUDIANTE",estudiante);
+   mvc.perform(put("/api/practicas/"+p+"/docentes").contentType("application/json").content("{\"profesorUbbId\":"+ubb+",\"profesorColegioId\":"+colegio+"}")).andExpect(status().isOk());
+   var profe=user("colegio@test.example").roles("PROFESOR_COLEGIO");
+   String evaluacion="{\"fortalezas\":\"Buena gestión del aula\",\"aspectosMejora\":\"Planificar cierres\",\"recomendaciones\":\"Usar material concreto\"}";
+   mvc.perform(get("/api/practicas").with(profe)).andExpect(jsonPath("$.length()").value(1));
+   mvc.perform(post("/api/practicas/"+p+"/evaluaciones").with(profe).contentType("application/json").content(evaluacion)).andExpect(status().isCreated());
+   mvc.perform(post("/api/practicas/"+otra+"/evaluaciones").with(profe).contentType("application/json").content(evaluacion)).andExpect(status().isNotFound());
+   mvc.perform(post("/api/practicas/"+p+"/evaluaciones").with(profe).contentType("application/json").content("{\"fortalezas\":\"\"}")).andExpect(status().isBadRequest());
+   mvc.perform(post("/api/practicas/"+p+"/evaluaciones").with(user("ubb@test.example").roles("PROFESOR_UBB")).contentType("application/json").content(evaluacion)).andExpect(status().isForbidden());
+   mvc.perform(get("/api/practicas/"+p+"/evaluaciones").with(user("ubb@test.example").roles("PROFESOR_UBB"))).andExpect(status().isOk()).andExpect(jsonPath("$[0].fortalezas").value("Buena gestión del aula"));
+   mvc.perform(get("/api/practicas/"+p+"/evaluaciones").with(user("evaluado@test.example").roles("ESTUDIANTE"))).andExpect(status().isForbidden());
   }
   @Test void s202AsignacionesPermisosYDesactivacion()throws Exception{
    long p=practica("PERM-1","INI1",2026);
