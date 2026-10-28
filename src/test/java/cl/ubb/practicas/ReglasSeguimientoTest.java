@@ -12,4 +12,12 @@ class ReglasSeguimientoTest {
         assertFalse(ReglasSeguimiento.vencido(null,true,hoy));
         assertFalse(ReglasSeguimiento.vencido(hoy.minusDays(1),false,hoy));
     }
+    @Test void estadoDependeDeLaUltimaVersionYSuRevision() {
+        assertEquals("PENDIENTE",ReglasSeguimiento.estado(0,null));
+        assertEquals("EN_REVISION",ReglasSeguimiento.estado(2,null));
+        assertEquals("OBSERVADO",ReglasSeguimiento.estado(1,"OBSERVADO"));
+        assertEquals("APROBADO",ReglasSeguimiento.estado(3,"APROBADO"));
+        assertTrue(ReglasSeguimiento.pendiente("OBSERVADO"));
+        assertFalse(ReglasSeguimiento.pendiente("EN_REVISION"));
+    }
 }
