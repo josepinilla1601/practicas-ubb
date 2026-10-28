@@ -117,6 +117,17 @@ class PracticasIntegrationTest {
    var d=new java.util.HashMap<String,Object>();d.put("correo",correo);d.put("nombre","Persona de prueba");d.put("clave","ClavePrueba2026");d.put("rol",rol);d.put("estudianteId",estudiante);
    return crear("/usuarios",d,201).get("id").asLong();
   }
+  @Test void s206EdicionConservaRelacionesYFiltrosCombinados()throws Exception{
+   long p=practica("EDIT-1","INT1",2026),r=requisito(p);
+   subir(p,r,"original.pdf",pdf(),201);
+   long s=db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,p);
+   long c=db.queryForObject("SELECT centro_id FROM practicas WHERE id=?",Long.class,p);
+   mvc.perform(put("/api/estudiantes/"+s).contentType("application/json").content(json.writeValueAsBytes(Map.of("identificador","EDIT-1","nombres","Nombre nuevo","apellidos","Apellido","correo","nuevo@example.com")))).andExpect(status().isOk());
+   mvc.perform(put("/api/centros/"+c).contentType("application/json").content("{\"nombre\":\"Centro actualizado\",\"comuna\":\"Chillán\"}")).andExpect(status().isOk());
+   mvc.perform(get("/api/practicas").param("q","Nombre nuevo").param("anio","2026").param("semestre","2").param("asignaturaId",String.valueOf(asignatura("INT1")))).andExpect(jsonPath("$.length()").value(1));
+   mvc.perform(get("/api/practicas").param("q","%' OR 1=1 --")).andExpect(jsonPath("$.length()").value(0));
+   assertEquals(1,seguimiento(p).get("documentos").size());
+  }
   @Test void s202AsignacionesPermisosYDesactivacion()throws Exception{
    long p=practica("PERM-1","INI1",2026);
    long estudiante=db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,p);
