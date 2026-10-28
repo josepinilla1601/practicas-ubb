@@ -15,18 +15,31 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.test.context.support.WithAnonymousUser;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.mock.web.MockHttpSession;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 
 /** Pruebas reales contra MySQL, exclusivamente en una base terminada en _test. */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@WithMockUser(username="coordinacion@test.example",roles="COORDINADOR")
 class PracticasIntegrationTest {
  @Autowired MockMvc mvc;
  @Autowired JdbcTemplate db;
- @Autowired ObjectMapper json;
+  @Autowired ObjectMapper json;
+  @Autowired WebApplicationContext context;
+  @Autowired PasswordEncoder encoder;
  @BeforeEach void limpiarSoloBaseTest(){
   assertTrue(db.queryForObject("SELECT DATABASE()",String.class).endsWith("_test"),"Las pruebas necesitan una base exclusiva terminada en _test.");
-  for(String tabla:new String[]{"documentos","requisitos_practica","practicas","estudiantes","centros"})db.update("DELETE FROM "+tabla);
+   for(String tabla:new String[]{"documentos","requisitos_practica","practicas","usuarios","estudiantes","centros"})db.update("DELETE FROM "+tabla);
+   db.update("INSERT INTO usuarios(correo,nombre,clave_hash,rol) VALUES('coordinacion@test.example','Pruebas','no-utilizada','COORDINADOR')");
+   mvc=MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).defaultRequest(get("/").with(csrf())).build();
  }
  JsonNode crear(String ruta,Object body,int status)throws Exception{
   return json.readTree(mvc.perform(post("/api"+ruta).contentType("application/json").content(json.writeValueAsBytes(body))).andExpect(status().is(status)).andReturn().getResponse().getContentAsString());
@@ -78,8 +91,25 @@ class PracticasIntegrationTest {
   subir(b,r,"archivo.pdf",pdf(),404);subir(a,r,"archivo.pdf",new byte[0],400);subir(a,r,"archivo.exe",pdf(),400);subir(a,r,"archivo.pdf","No es PDF".getBytes(),400);
   assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM documentos",Integer.class));
  }
- @Test void hu05PeriodoSinConfiguracionNoSeConsideraCompleto()throws Exception{
+  @Test void hu05PeriodoSinConfiguracionNoSeConsideraCompleto()throws Exception{
   long p=practica("SIN-CONFIG","INI1",2027);var d=seguimiento(p);
-  assertFalse(d.get("configurado").asBoolean());assertTrue(d.get("requisitos").isEmpty());assertEquals(0,d.get("practica").get("requeridos").asInt());
- }
+   assertFalse(d.get("configurado").asBoolean());assertTrue(d.get("requisitos").isEmpty());assertEquals(0,d.get("practica").get("requeridos").asInt());
+  }
+  @Test @WithAnonymousUser void s201SesionLoginCambioClaveYLogout()throws Exception{
+   org.springframework.security.test.context.TestSecurityContextHolder.clearContext();
+   db.update("UPDATE usuarios SET clave_hash=?",encoder.encode("InicialSegura2026"));
+   mvc.perform(get("/api/estudiantes")).andExpect(status().isUnauthorized());
+   mvc.perform(post("/api/login").param("username","coordinacion@test.example").param("password","incorrecta")).andExpect(status().isUnauthorized());
+   var resultado=mvc.perform(post("/api/login").param("username","coordinacion@test.example").param("password","InicialSegura2026")).andExpect(status().isOk()).andReturn();
+   var sesion=(MockHttpSession)resultado.getRequest().getSession(false);
+   assertNotNull(sesion);
+   mvc.perform(get("/api/sesion").session(sesion)).andExpect(jsonPath("$.usuario.rol").value("COORDINADOR"));
+   mvc.perform(post("/api/cuenta/clave").session(sesion).contentType("application/json").content("{\"actual\":\"InicialSegura2026\",\"nueva\":\"NuevaClaveSegura2026\"}")).andExpect(status().isOk());
+   mvc.perform(post("/api/logout").session(sesion)).andExpect(status().isOk());
+   mvc.perform(post("/api/login").param("username","coordinacion@test.example").param("password","InicialSegura2026")).andExpect(status().isUnauthorized());
+   mvc.perform(post("/api/login").param("username","coordinacion@test.example").param("password","NuevaClaveSegura2026")).andExpect(status().isOk());
+  }
+  @Test void s201RechazaCsrfInvalido()throws Exception{
+   mvc.perform(post("/api/estudiantes").with(csrf().useInvalidToken()).contentType("application/json").content("{}")).andExpect(status().isForbidden());
+  }
 }
