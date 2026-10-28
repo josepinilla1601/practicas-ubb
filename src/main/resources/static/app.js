@@ -1,36 +1,148 @@
 'use strict';
-const state={page:'resumen',estudiantes:[],centros:[],asignaturas:[],practicas:[],resumen:{}};
-const $=s=>document.querySelector(s);
-const escapeHTML=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const e=escapeHTML;
-async function api(path,options={}) {
- const resp=await fetch('/api'+path,{...options,headers:options.body instanceof FormData?{}:{'Content-Type':'application/json',...(options.headers||{})}});
- if(!resp.ok){let info;try{info=await resp.json()}catch{info={mensaje:'No se pudo completar la operación.'}}throw new Error(info.mensaje+(info.detalles?.length?' '+info.detalles.join(' · '):''));}
- return resp.json();
+
+const state = {usuario:null, csrf:'', csrfHeader:'X-CSRF-TOKEN', page:'resumen', estudiantes:[], centros:[], asignaturas:[], practicas:[], resumen:{}};
+const $ = selector => document.querySelector(selector);
+const e = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pages = {};
+const actions = {};
+const detailSections = [];
+const detailBindings = [];
+const role = (...roles) => !!state.usuario && roles.includes(state.usuario.rol);
+const coord = () => role('COORDINADOR');
+
+async function api(path, options={}) {
+  const headers = {...options.headers};
+  if(options.body && !(options.body instanceof FormData) && !(options.body instanceof URLSearchParams)) headers['Content-Type']='application/json';
+  if(options.method && !['GET','HEAD'].includes(options.method)) headers[state.csrfHeader]=state.csrf;
+  const response = await fetch('/api'+path, {...options, headers});
+  let data;
+  try { data=await response.json(); } catch { data={mensaje:'El servidor no devolvió una respuesta válida.'}; }
+  if(!response.ok) {
+    if(response.status===401 && path!=='/login') { state.usuario=null; renderLogin(); }
+    throw new Error((data.mensaje || 'No se pudo completar la operación.')+(data.detalles?.length?' '+data.detalles.join(' · '):''));
+  }
+  return data;
 }
-function notice(text,error=false){const n=$('#notice');n.textContent=text;n.className=error?'error':'';n.hidden=false;n.scrollIntoView({behavior:'smooth',block:'nearest'});}
-async function load(){[state.estudiantes,state.centros,state.asignaturas,state.practicas,state.resumen]=await Promise.all(['/estudiantes','/centros','/asignaturas','/practicas','/resumen'].map(x=>api(x)));}
-function heading(title,description,action=''){return `<div class="heading"><div><div class="eyebrow">FORMACIÓN PRÁCTICA</div><h1>${title}</h1><p>${description}</p></div>${action}</div>`;}
-function field(label,name,type='text',required=true,max=150,hint=''){return `<label class="field">${label}${required?' *':''}<input name="${name}" type="${type}" ${required?'required':''} maxlength="${max}" ${type==='email'?'autocomplete="email"':''}>${hint?`<small>${hint}</small>`:''}</label>`;}
-function selectField(label,name,options,required=true){return `<label class="field">${label}${required?' *':''}<select name="${name}" ${required?'required':''}><option value="">Seleccionar…</option>${options}</select></label>`;}
-function options(items,label){return items.map(x=>`<option value="${x.id}">${e(label(x))}</option>`).join('');}
-function empty(title,subtitle){return `<div class="empty"><strong>${title}</strong>${subtitle}</div>`;}
-function progress(p){let total=Number(p.requeridos),rec=Number(p.recibidos);if(!total)return '<span class="pill">Sin requisitos definidos</span>';return `<span class="pill ${rec===total?'ok':'pending'}">${rec} de ${total} recibidos</span><div class="progress"><span style="width:${100*rec/total}%"></span></div>`;}
-function practicesTable(items){return items.length?`<div class="scroll"><table><thead><tr><th>ESTUDIANTE</th><th>ASIGNATURA / PERÍODO</th><th>DOCUMENTACIÓN</th><th></th></tr></thead><tbody>${items.map(p=>`<tr><td><strong>${e(p.estudiante)}</strong><small>${e(p.identificador)}</small></td><td>${e(p.asignatura)}<small>${p.anio}-${p.semestre} · ${e(p.centro||'Actividad universitaria')}</small></td><td>${progress(p)}</td><td><button class="button secondary small" data-detail="${p.id}">Ver seguimiento</button></td></tr>`).join('')}</tbody></table></div>`:empty('Todavía no hay prácticas','Registra un estudiante y luego su práctica para comenzar el seguimiento.');}
-function renderHome(){return heading('Una mirada a tus prácticas','Consulta estudiantes, centros y documentos desde un mismo lugar.',`<button class="button secondary" id="demo">Cargar ejemplo ficticio</button>`)+`<div class="intro"><div><h2>Cada práctica, con sus antecedentes.</h2><p>Registra la asignatura y el período. Reúne los documentos y revisa qué falta.</p></div><button class="button" data-page="practicas">Registrar práctica</button></div><div class="stats">${[['estudiantes','Estudiantes registrados'],['centros','Centros de práctica'],['practicas','Prácticas registradas'],['documentos','Documentos recibidos']].map(([k,v])=>`<div class="stat"><div class="number">${state.resumen[k]||0}</div><div class="label">${v}</div></div>`).join('')}</div><section class="card"><div class="card-head"><div><h2>Seguimiento reciente</h2><p>Los documentos recibidos no equivalen a una aprobación académica.</p></div><button class="button secondary small" data-page="practicas">Ver todas</button></div>${practicesTable(state.practicas.slice(0,6))}</section>`;}
-function renderStudents(){return heading('Estudiantes','Registra sus antecedentes para vincularlos a una práctica.')+`<div class="split"><section class="card"><div class="card-head"><h2>Nuevo estudiante</h2></div><form class="card-body" id="student-form">${field('Identificador','identificador','text',true,30,'Usa un identificador institucional consistente; no se presupone que sea RUT.')}${field('Nombres','nombres','text',true,100)}${field('Apellidos','apellidos','text',true,100)}${field('Correo institucional','correo','email')}<button class="button">Registrar estudiante</button><p class="hint">* Campos obligatorios. El identificador no se puede repetir.</p></form></section><section class="card"><div class="card-head"><h2>Estudiantes registrados</h2><span class="pill">${state.estudiantes.length}</span></div>${state.estudiantes.length?`<div class="scroll"><table><thead><tr><th>ESTUDIANTE</th><th>IDENTIFICADOR</th><th>CORREO</th></tr></thead><tbody>${state.estudiantes.map(s=>`<tr><td><strong>${e(s.nombres)} ${e(s.apellidos)}</strong></td><td>${e(s.identificador)}</td><td>${e(s.correo)}</td></tr>`).join('')}</tbody></table></div>`:empty('El registro está vacío','Ingresa el primer estudiante en el formulario.')}</section></div>`;}
-function renderCenters(){return heading('Centros de práctica','Mantén a mano los establecimientos y sus datos de contacto.')+`<div class="split"><section class="card"><div class="card-head"><h2>Nuevo centro</h2></div><form class="card-body" id="center-form">${field('Establecimiento','nombre')}${field('Comuna','comuna','text',true,100)}${field('Dirección','direccion','text',false,200)}${field('Persona de contacto','contacto','text',false)}${field('Correo de contacto','correo','email',false)}${field('Teléfono','telefono','tel',false,40)}<button class="button">Registrar centro</button><p class="hint">* Campos obligatorios. Los datos de contacto son opcionales.</p></form></section><section class="card"><div class="card-head"><h2>Centros registrados</h2><span class="pill">${state.centros.length}</span></div>${state.centros.length?`<div class="scroll"><table><thead><tr><th>ESTABLECIMIENTO</th><th>COMUNA</th><th>CONTACTO</th></tr></thead><tbody>${state.centros.map(s=>`<tr><td><strong>${e(s.nombre)}</strong><small>${e(s.direccion)}</small></td><td>${e(s.comuna)}</td><td>${e(s.contacto||'Sin contacto')}<small>${e(s.correo)} ${e(s.telefono)}</small></td></tr>`).join('')}</tbody></table></div>`:empty('Todavía no hay centros','Registra un establecimiento para asociarlo a una práctica.')}</section></div>`;}
-function renderPractices(){return heading('Prácticas y documentos','Organiza cada práctica y consulta sus antecedentes de forma individual.')+`<div class="split wide"><section class="card"><div class="card-head"><h2>Nueva práctica</h2></div><form class="card-body" id="practice-form">${selectField('Estudiante','estudianteId',options(state.estudiantes,x=>x.nombres+' '+x.apellidos+' · '+x.identificador))}${selectField('Asignatura','asignaturaId',options(state.asignaturas,x=>x.nombre))}${selectField('Centro de práctica','centroId',options(state.centros,x=>x.nombre),false)}<p class="hint" id="center-hint">Selecciona primero la asignatura.</p><div class="row"><label class="field">Año *<input name="anio" type="number" min="2000" max="2100" value="2026" required></label><label class="field">Semestre *<select name="semestre" required><option value="1">Primer semestre</option><option value="2" selected>Segundo semestre</option></select></label></div>${field('Profesor responsable','profesorResponsable')}<button class="button">Registrar práctica</button><p class="hint">Los requisitos de ejemplo están definidos para 2026. Otros períodos aparecerán sin requisitos hasta configurarlos.</p></form></section><section class="card"><div class="card-head"><h2>Prácticas registradas</h2><span class="pill">${state.practicas.length}</span></div>${practicesTable(state.practicas)}</section></div>`;}
-function renderDetail(data){const p=data.practica;return `<button class="back" data-page="practicas">← Volver a prácticas</button>`+heading(e(p.estudiante),e(p.asignatura)+` · Período ${p.anio}-${p.semestre}`,progress(p))+`<div class="meta"><div>Centro<strong>${e(p.centro||'No corresponde')}</strong></div><div>Profesor responsable<strong>${e(p.profesor_responsable)}</strong></div><div>Identificador<strong>${e(p.identificador)}</strong></div></div><p class="note">${e(data.nota)} Recibido indica que existe un archivo; su contenido y aprobación deben revisarse por separado.</p><div class="split wide"><section class="card"><div class="card-head"><h2>Adjuntar documento</h2></div>${data.configurado?`<form class="card-body" id="upload-form" data-practice="${p.id}">${selectField('Requisito documental','requisitoId',options(data.requisitos,x=>x.nombre))}<label class="field">Archivo *<input class="file-input" name="archivo" type="file" accept=".pdf,.docx,.xlsx" required><small>PDF, DOCX o XLSX. Máximo 10 MB por archivo.</small></label><button class="button">Guardar documento</button><p class="hint">Puedes adjuntar más de un archivo al mismo requisito. No se sobrescriben versiones anteriores.</p></form>`:empty('Sin requisitos definidos','Configura los requisitos de esta asignatura y período antes de adjuntar documentos.')}</section><section class="card"><div class="card-head"><div><h2>Documentación requerida</h2><p>${data.requisitos.length} requisitos para esta práctica</p></div></div>${data.configurado?`<div class="scroll"><table><thead><tr><th>DOCUMENTO</th><th>ESTADO</th></tr></thead><tbody>${data.requisitos.map(r=>`<tr><td>${e(r.nombre)}<small>${r.archivos} archivo(s)</small></td><td><span class="pill ${r.estado==='RECIBIDO'?'ok':'pending'}">${r.estado==='RECIBIDO'?'Recibido':'Pendiente'}</span></td></tr>`).join('')}</tbody></table></div>`:empty('No hay una lista configurada','La práctica no se considera completa por tener cero requisitos.')}</section></div><section class="card"><div class="card-head"><h2>Archivos recibidos</h2></div>${data.documentos.length?`<div class="scroll"><table><thead><tr><th>ARCHIVO</th><th>REQUISITO</th><th>FECHA DE CARGA</th><th></th></tr></thead><tbody>${data.documentos.map(d=>`<tr><td><strong>${e(d.nombre_original)}</strong><small>${Math.max(1,Math.round(d.tamanio/1024))} KB</small></td><td>${e(d.requisito)}</td><td>${e(new Date(d.cargado_en).toLocaleString('es-CL'))}</td><td><a class="button secondary small" href="/api/documentos/${d.id}/descarga">Descargar</a></td></tr>`).join('')}</tbody></table></div>`:empty('Todavía no hay archivos','Adjunta el primer documento para actualizar el seguimiento.')}</section>`;}
-async function go(page,id){state.page=page;document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===(page==='detalle'?'practicas':page)));$('#breadcrumb').textContent=({resumen:'Vista general',estudiantes:'Estudiantes',centros:'Centros de práctica',practicas:'Prácticas y documentos',detalle:'Seguimiento individual'})[page];try{if(page==='detalle')$('#app').innerHTML=renderDetail(await api('/practicas/'+id+'/seguimiento'));else $('#app').innerHTML=({resumen:renderHome,estudiantes:renderStudents,centros:renderCenters,practicas:renderPractices})[page]();bind();}catch(err){notice(err.message,true);}}
-function formSubmit(selector,fn){const f=$(selector);if(!f)return;f.addEventListener('submit',async ev=>{ev.preventDefault();const b=f.querySelector('button[type=submit],button.button');b.disabled=true;try{await fn(f);notice('Información guardada correctamente.');}catch(err){notice(err.message,true);}finally{b.disabled=false;}});}
-function bind(){
- formSubmit('#student-form',async f=>{await api('/estudiantes',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(f)))});await load();await go('estudiantes');});
- formSubmit('#center-form',async f=>{await api('/centros',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(f)))});await load();await go('centros');});
- formSubmit('#practice-form',async f=>{const d=Object.fromEntries(new FormData(f));for(const k of ['estudianteId','asignaturaId','anio','semestre'])d[k]=Number(d[k]);d.centroId=d.centroId?Number(d.centroId):null;const p=await api('/practicas',{method:'POST',body:JSON.stringify(d)});await load();await go('detalle',p.id);});
- const form=$('#practice-form');if(form){const sel=form.elements.asignaturaId;sel.onchange=()=>{const a=state.asignaturas.find(x=>x.id===Number(sel.value));form.elements.centroId.required=!!a?.requiere_centro;form.elements.centroId.disabled=!a?.requiere_centro;if(!a?.requiere_centro)form.elements.centroId.value='';$('#center-hint').textContent=a?.requiere_centro?'Esta práctica requiere un centro registrado.':'Las prácticas iniciales pueden registrarse sin centro.';};sel.onchange();}
- formSubmit('#upload-form',async f=>{const a=f.elements.archivo.files[0];if(!a||a.size>10*1024*1024)throw new Error('Selecciona un archivo de hasta 10 MB.');const body=new FormData();body.append('archivo',a);await api(`/practicas/${f.dataset.practice}/requisitos/${f.elements.requisitoId.value}/documentos`,{method:'POST',body});await load();await go('detalle',f.dataset.practice);});
- const demo=$('#demo');if(demo)demo.onclick=async()=>{demo.disabled=true;try{let s=state.estudiantes.find(s=>s.identificador==='DEMO-001');if(!s)s=await api('/estudiantes',{method:'POST',body:JSON.stringify({identificador:'DEMO-001',nombres:'Estudiante',apellidos:'de Demostración',correo:'demo@example.com'})});let c=state.centros.find(c=>c.nombre==='Colegio de Demostración');if(!c)c=await api('/centros',{method:'POST',body:JSON.stringify({nombre:'Colegio de Demostración',comuna:'Chillán',direccion:'Dirección ficticia',contacto:'Contacto ficticio',correo:'centro@example.com',telefono:''})});const asig=state.asignaturas.find(a=>a.codigo==='INT1');let p=state.practicas.find(p=>p.estudiante_id===s.id&&p.asignatura_id===asig.id&&p.anio===2026&&p.semestre===2);if(!p)p=await api('/practicas',{method:'POST',body:JSON.stringify({estudianteId:s.id,asignaturaId:asig.id,anio:2026,semestre:2,profesorResponsable:'Profesor de demostración',centroId:c.id})});await load();await go('detalle',p.id);notice('Ejemplo ficticio disponible. Puedes adjuntar un documento para probar el seguimiento.');}catch(err){notice(err.message,true);}finally{demo.disabled=false;}};
+const send = (path, body, method='POST') => api(path,{method,body:JSON.stringify(body)});
+function notice(text, error=false) { const n=$('#notice');n.textContent=text;n.className=error?'error':'';n.hidden=false; }
+function heading(title,description,action='') { return `<div class="heading"><div><div class="eyebrow">FORMACIÓN PRÁCTICA</div><h1>${e(title)}</h1><p>${e(description)}</p></div>${action}</div>`; }
+function field(label,name,type='text',required=true,max=150,value='') {
+  return `<label class="field">${e(label)}${required?' *':''}<input name="${name}" type="${type}" ${required?'required':''} maxlength="${max}" value="${e(value)}" ${type==='password'?'autocomplete="current-password"':''}></label>`;
 }
-document.addEventListener('click',ev=>{const page=ev.target.closest('[data-page]');const detail=ev.target.closest('[data-detail]');if(page){$('#notice').hidden=true;go(page.dataset.page);}else if(detail){$('#notice').hidden=true;go('detalle',detail.dataset.detail);}});
-load().then(()=>go('resumen')).catch(err=>{$('#app').innerHTML=empty('No se pudo conectar','Comprueba que la aplicación siga ejecutándose y que MySQL esté disponible.');notice(err.message,true);});
+function selectField(label,name,items,required=true,selected='') {
+  return `<label class="field">${e(label)}${required?' *':''}<select name="${name}" ${required?'required':''}><option value="">Seleccionar…</option>${items.map(([value,text])=>`<option value="${e(value)}" ${String(value)===String(selected)?'selected':''}>${e(text)}</option>`).join('')}</select></label>`;
+}
+const options = (items,label) => items.map(x=>[x.id,label(x)]);
+const empty = (title,subtitle='') => `<div class="empty"><strong>${e(title)}</strong><p>${e(subtitle)}</p></div>`;
+const button = (text,attrs='',secondary=false) => `<button class="button ${secondary?'secondary':''}" ${attrs}>${e(text)}</button>`;
+const card = (title,body) => `<section class="card"><div class="card-head"><h2>${e(title)}</h2></div><div class="card-body">${body}</div></section>`;
+const formData = form => Object.fromEntries(new FormData(form));
+const dateText = value => value ? String(value).replace('T',' ').substring(0,19) : '—';
+function onForm(selector, handler) {
+  const form=$(selector);if(!form)return;
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();const submit=form.querySelector('button[type="submit"],button.button');if(submit)submit.disabled=true;
+    try { await handler(form); } catch(err) { notice(err.message,true); } finally { if(submit)submit.disabled=false; }
+  });
+}
+function registerPage(key,label,roles,render,bind=()=>{}) { pages[key]={label,roles,render,bind}; }
+function renderNav() {
+  $('nav').innerHTML=Object.entries(pages).filter(([key,page])=>page.label && role(...page.roles))
+    .map(([key,page])=>`<button data-page="${key}" class="${key===state.page?'active':''}">${e(page.label)}</button>`).join('');
+  $('#identity').textContent=state.usuario ? `${state.usuario.nombre} · ${state.usuario.rol.replaceAll('_',' ')}` : '';
+  $('#logout').hidden=!state.usuario;
+}
+async function refreshSession() { Object.assign(state,await api('/sesion')); }
+async function load() {
+  const [asignaturas,practicas,resumen]=await Promise.all(['/asignaturas','/practicas','/resumen'].map(apiPath=>api(apiPath)));
+  Object.assign(state,{asignaturas,practicas,resumen});
+  if(coord()) [state.estudiantes,state.centros]=await Promise.all([api('/estudiantes'),api('/centros')]);
+  else {state.estudiantes=[];state.centros=[];}
+}
+let navigation=0;
+async function go(page,id) {
+  const target=pages[page];if(!target || !role(...target.roles))return;
+  const turn=++navigation;state.page=page;
+  try {
+    const html=await target.render(id);if(turn!==navigation || !state.usuario)return;
+    $('#app').innerHTML=html;$('#breadcrumb').textContent=target.label || 'Seguimiento individual';renderNav();target.bind(id);
+  } catch(err) { notice(err.message,true); }
+}
+async function saved(page,id) { await load();await go(page,id);notice('Información guardada correctamente.'); }
+function renderLogin() {
+  navigation++;document.body.classList.add('signed-out');$('nav').innerHTML='';$('#identity').textContent='';$('#logout').hidden=true;
+  $('#app').innerHTML=heading('Bienvenido a Prácticas UBB','Ingresa con la cuenta asignada por la coordinación.')+
+    card('Iniciar sesión',`<form id="login-form">${field('Correo','username','email')}${field('Contraseña','password','password',true,60)}${button('Ingresar','type="submit"')}<p class="hint">Si todavía no tienes cuenta, solicítala al coordinador.</p></form>`);
+  onForm('#login-form',async form=>{
+    await api('/login',{method:'POST',body:new URLSearchParams(new FormData(form))});
+    await refreshSession();document.body.classList.remove('signed-out');$('#notice').hidden=true;await load();await go('resumen');
+  });
+}
+function progress(p) {
+  const total=Number(p.requeridos),rec=Number(p.recibidos);
+  if(!total)return '<span class="pill">Sin requisitos definidos</span>';
+  return `<span class="pill ${rec===total?'ok':'pending'}">${rec} de ${total} recibidos</span><div class="progress"><span style="width:${100*rec/total}%"></span></div>`;
+}
+function practicesTable(items) {
+  if(!items.length)return empty('No hay prácticas para mostrar','Revisa los filtros o las asignaciones.');
+  return `<div class="scroll"><table><thead><tr><th>ESTUDIANTE</th><th>ASIGNATURA / PERÍODO</th><th>DOCUMENTACIÓN</th><th>DETALLE</th></tr></thead><tbody>${items.map(p=>`<tr><td><strong>${e(p.estudiante)}</strong><small>${e(p.identificador)}</small></td><td>${e(p.asignatura)}<small>${p.anio}-${p.semestre} · ${e(p.centro||'Actividad universitaria')}</small></td><td>${progress(p)}</td><td>${button('Ver seguimiento',`data-detail="${p.id}"`,true)}</td></tr>`).join('')}</tbody></table></div>`;
+}
+const allRoles=['COORDINADOR','PROFESOR_UBB','PROFESOR_COLEGIO','ESTUDIANTE'];
+registerPage('resumen','Vista general',allRoles,()=>heading('Una mirada a tus prácticas','Información visible según tu cuenta y tus asignaciones.')+
+  `<div class="stats">${[['estudiantes','Estudiantes'],['centros','Centros'],['practicas','Prácticas'],['documentos','Archivos recibidos']].map(([key,label])=>`<div class="stat"><div class="number">${state.resumen[key]||0}</div><div class="label">${label}</div></div>`).join('')}</div>`+
+  card('Seguimiento reciente',`<p>Recibido no equivale a aprobado. Una evaluación de desempeño es distinta de una revisión documental.</p>${practicesTable(state.practicas.slice(0,6))}`));
+
+function studentFields(s={}) { return field('Identificador','identificador','text',true,30,s.identificador)+field('Nombres','nombres','text',true,100,s.nombres)+field('Apellidos','apellidos','text',true,100,s.apellidos)+field('Correo','correo','email',true,150,s.correo); }
+function centerFields(c={}) { return field('Establecimiento','nombre','text',true,150,c.nombre)+field('Comuna','comuna','text',true,100,c.comuna)+field('Dirección','direccion','text',false,200,c.direccion)+field('Contacto','contacto','text',false,150,c.contacto)+field('Correo','correo','email',false,150,c.correo)+field('Teléfono','telefono','tel',false,40,c.telefono); }
+registerPage('estudiantes','Estudiantes',['COORDINADOR'],()=>heading('Estudiantes','Antecedentes para vincular estudiantes a sus prácticas.')+
+  `<div class="split">${card('Registrar estudiante',`<form id="student-form">${studentFields()}${button('Registrar','type="submit"')}</form>`)}${card('Estudiantes registrados',`<div class="scroll"><table><thead><tr><th>NOMBRE</th><th>IDENTIFICADOR</th><th>CORREO</th></tr></thead><tbody>${state.estudiantes.map(s=>`<tr><td>${e(s.nombres)} ${e(s.apellidos)}</td><td>${e(s.identificador)}</td><td>${e(s.correo)}</td></tr>`).join('')}</tbody></table></div>`)}</div>`,()=>onForm('#student-form',async f=>{await send('/estudiantes',formData(f));await saved('estudiantes');}));
+registerPage('centros','Centros de práctica',['COORDINADOR'],()=>heading('Centros de práctica','Establecimientos y sus datos de contacto.')+
+  `<div class="split">${card('Registrar centro',`<form id="center-form">${centerFields()}${button('Registrar','type="submit"')}</form>`)}${card('Centros registrados',`<div class="scroll"><table><thead><tr><th>NOMBRE</th><th>COMUNA</th><th>CONTACTO</th></tr></thead><tbody>${state.centros.map(c=>`<tr><td>${e(c.nombre)}</td><td>${e(c.comuna)}</td><td>${e(c.contacto)}<small>${e(c.correo)}</small></td></tr>`).join('')}</tbody></table></div>`)}</div>`,()=>onForm('#center-form',async f=>{await send('/centros',formData(f));await saved('centros');}));
+
+function practiceForm() { return card('Registrar práctica',`<form id="practice-form">${selectField('Estudiante','estudianteId',options(state.estudiantes,x=>`${x.nombres} ${x.apellidos}`))}${selectField('Asignatura','asignaturaId',options(state.asignaturas,x=>x.nombre))}${selectField('Centro','centroId',options(state.centros,x=>x.nombre),false)}<p id="center-hint" class="hint"></p><div class="row">${field('Año','anio','number',true,4,new Date().getFullYear())}${selectField('Semestre','semestre',[[1,'Primero'],[2,'Segundo']],true,2)}</div>${field('Profesor responsable (referencia)','profesorResponsable')}${button('Registrar práctica','type="submit"')}<p class="hint">El nombre de referencia no concede acceso: asigna la cuenta docente desde el seguimiento.</p></form>`); }
+function bindPracticeForm() {
+  const form=$('#practice-form');if(!form)return;
+  const update=()=>{const a=state.asignaturas.find(x=>Number(x.id)===Number(form.elements.asignaturaId.value));form.elements.centroId.required=!!a?.requiere_centro;$('#center-hint').textContent=a?.requiere_centro?'Esta asignatura requiere un centro.':'El centro es opcional para esta asignatura.';};
+  form.elements.asignaturaId.addEventListener('change',update);update();
+  onForm('#practice-form',async f=>{const d=formData(f);for(const k of ['estudianteId','asignaturaId','anio','semestre'])d[k]=Number(d[k]);d.centroId=d.centroId?Number(d.centroId):null;const p=await send('/practicas',d);await saved('detalle',p.id);});
+}
+registerPage('practicas','Prácticas y documentos',allRoles,()=>heading('Prácticas y documentos','Consulta las prácticas que tienes autorizadas.')+
+  (coord()?`<div class="split wide">${practiceForm()}${card('Prácticas',practicesTable(state.practicas))}</div>`:card('Prácticas',practicesTable(state.practicas))),bindPracticeForm);
+
+function uploadForm(data) {
+  if(!role('COORDINADOR','ESTUDIANTE'))return '';
+  return card('Adjuntar documento',data.configurado?`<form id="upload-form">${selectField('Requisito','requisitoId',options(data.requisitos,x=>x.nombre))}<label class="field">Archivo *<input name="archivo" type="file" accept=".pdf,.docx,.xlsx" required><small>PDF, DOCX o XLSX. Máximo 10 MB.</small></label>${button('Guardar entrega','type="submit"')}<p>Los archivos anteriores se conservan.</p></form>`:empty('Sin requisitos definidos','La coordinación debe preparar los requisitos de la práctica.'));
+}
+function requirementTable(data) {
+  return card('Requisitos',data.configurado?`<div class="scroll"><table><thead><tr><th>REQUISITO</th><th>ESTADO</th></tr></thead><tbody>${data.requisitos.map(r=>`<tr><td>${e(r.nombre)}</td><td><span class="pill">${e(r.estado)}</span></td></tr>`).join('')}</tbody></table></div>`:empty('Sin configuración','Cero requisitos no significa práctica completa.'));
+}
+function documentsTable(data) {
+  return card('Archivos entregados',data.documentos.length?`<div class="scroll"><table><thead><tr><th>ARCHIVO</th><th>REQUISITO</th><th>FECHA</th></tr></thead><tbody>${data.documentos.map(d=>`<tr><td><a href="/api/documentos/${d.id}/descarga">${e(d.nombre_original)}</a></td><td>${e(d.requisito)}</td><td>${e(dateText(d.cargado_en))}</td></tr>`).join('')}</tbody></table></div>`:empty('Todavía no hay archivos'));
+}
+registerPage('detalle','',allRoles,async id=>{
+  const data=await api(`/practicas/${id}/seguimiento`);state.detail=data;const p=data.practica;
+  return button('← Volver a prácticas','data-page="practicas"',true)+heading(p.estudiante,`${p.asignatura} · ${p.anio}-${p.semestre}`,progress(p))+
+    `<div class="meta"><div>Centro<strong>${e(p.centro||'No corresponde')}</strong></div><div>Profesor responsable<strong>${e(p.profesor_responsable)}</strong></div></div>`+
+    `<div class="split wide">${uploadForm(data)}${requirementTable(data)}</div>`+documentsTable(data)+(await Promise.all(detailSections.map(render=>render(data)))).join('');
+},id=>{
+  onForm('#upload-form',async form=>{const file=form.elements.archivo.files[0];if(!file || file.size>10*1024*1024)throw new Error('Selecciona un archivo de hasta 10 MB.');const body=new FormData();body.append('archivo',file);await api(`/practicas/${id}/requisitos/${form.elements.requisitoId.value}/documentos`,{method:'POST',body});await saved('detalle',id);});
+  detailBindings.forEach(bind=>bind(id));
+});
+registerPage('cuenta','Mi contraseña',allRoles,()=>heading('Cambiar contraseña','Necesitas conocer tu contraseña actual.')+
+  card('Credenciales',`<form id="password-form">${field('Contraseña actual','actual','password',true,60)}${field('Nueva contraseña (10–60 caracteres)','nueva','password',true,60)}${field('Confirmar nueva contraseña','confirmacion','password',true,60)}${button('Actualizar contraseña','type="submit"')}</form>`),()=>{
+    $('#password-form').elements.nueva.autocomplete='new-password';$('#password-form').elements.confirmacion.autocomplete='new-password';
+    onForm('#password-form',async form=>{const d=formData(form);if(d.nueva!==d.confirmacion)throw new Error('Las contraseñas nuevas no coinciden.');await send('/cuenta/clave',{actual:d.actual,nueva:d.nueva});form.reset();notice('Contraseña actualizada.');});
+});
+document.addEventListener('click',async event=>{
+  const target=event.target.closest('button');if(!target)return;
+  try {
+    if(target.dataset.page){$('#notice').hidden=true;await go(target.dataset.page);}
+    else if(target.dataset.detail){$('#notice').hidden=true;await go('detalle',target.dataset.detail);}
+    else if(target.dataset.action && actions[target.dataset.action]){target.disabled=true;await actions[target.dataset.action](target);}
+    else if(target.id==='logout'){await api('/logout',{method:'POST'});state.usuario=null;await refreshSession();renderLogin();}
+  } catch(err) {notice(err.message,true);} finally {target.disabled=false;}
+});
+document.addEventListener('DOMContentLoaded',async()=>{
+  try {await refreshSession();if(!state.usuario){renderLogin();return;}await load();await go('resumen');}
+  catch(err){$('#app').innerHTML=empty('No se pudo iniciar','Comprueba la conexión con el servidor y MySQL.');notice(err.message,true);}
+});

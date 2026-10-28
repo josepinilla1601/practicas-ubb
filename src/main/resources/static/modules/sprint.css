@@ -1,0 +1,23 @@
+[hidden] { display: none !important; }
+.session-tools { display:flex; align-items:center; gap:12px; }
+.session-tools span { color:var(--ink); font-size:12px; }
+.signed-out .sidebar nav, .signed-out .nav-label { display:none; }
+.signed-out main { max-width:720px; }
+.card { margin-bottom:20px; }
+form .button { margin-top:10px; }
+.field textarea { font:inherit; width:100%; min-height:110px; padding:12px; border:1px solid var(--line); border-radius:6px; resize:vertical; }
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible { outline:3px solid #127562; outline-offset:3px; }
+.tools { display:flex; flex-wrap:wrap; gap:12px; align-items:end; margin-bottom:18px; }
+.tools .field { flex:1; min-width:140px; }
+.pill.danger { background:#fff0ed; color:#9f2929; }
+.pill.review { background:#eef0ff; color:#40368b; }
+.messages { display:grid; gap:14px; }
+.message { padding:16px; border:1px solid var(--line); border-radius:10px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.message.answer { background:var(--pale); }
+.sources { font-size:13px; }
+.chat-layout { display:grid; grid-template-columns:240px 1fr; gap:20px; }
+.stack { display:grid; gap:10px; }
+.stack button { text-align:left; }
+.document-text { white-space:pre-wrap; max-height:350px; overflow:auto; font-size:13px; }
+.table-actions { display:flex; gap:6px; flex-wrap:wrap; }
+@media(max-width:900px) { .chat-layout { grid-template-columns:1fr; } header { height:auto; min-height:76px; flex-wrap:wrap; gap:12px; padding:15px; } }
