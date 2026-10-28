@@ -87,17 +87,18 @@ public class PracticasService {
         db.update("INSERT IGNORE INTO periodos(anio,semestre) VALUES(?,?)",s.anio(),s.semestre());
         long periodo=db.queryForObject("SELECT id FROM periodos WHERE anio=? AND semestre=?",Long.class,s.anio(),s.semestre());
         long id=insert("INSERT INTO practicas(estudiante_id,asignatura_id,periodo_id,centro_id,profesor_responsable) VALUES(?,?,?,?,?)",s.estudianteId(),s.asignaturaId(),periodo,s.centroId(),clean(s.profesorResponsable()));
-        db.update("INSERT INTO requisitos_practica(practica_id,codigo,nombre) SELECT ?,codigo,nombre FROM requisitos_plantilla WHERE asignatura_id=? AND periodo_id=?",id,s.asignaturaId(),periodo);
+        db.update("INSERT INTO requisitos_practica(practica_id,codigo,nombre,fecha_limite) SELECT ?,codigo,nombre,fecha_limite FROM requisitos_plantilla WHERE asignatura_id=? AND periodo_id=?",id,s.asignaturaId(),periodo);
         return practica(id);
     }
     public Map<String,Object> seguimiento(long id) {
         var practica=practica(id);
         var requisitos=db.queryForList("""
-            SELECT r.id,r.codigo,r.nombre,COUNT(d.id) archivos,
+            SELECT r.id,r.codigo,r.nombre,r.fecha_limite,COUNT(d.id) archivos,
              CASE WHEN COUNT(d.id)>0 THEN 'RECIBIDO' ELSE 'PENDIENTE' END estado
             FROM requisitos_practica r LEFT JOIN documentos d ON d.requisito_id=r.id
-            WHERE r.practica_id=? GROUP BY r.id,r.codigo,r.nombre ORDER BY r.id
+            WHERE r.practica_id=? GROUP BY r.id,r.codigo,r.nombre,r.fecha_limite ORDER BY r.id
             """,id);
+        requisitos.forEach(r -> r.put("vencido",ReglasSeguimiento.vencido(r.get("fecha_limite")==null?null:((java.sql.Date)r.get("fecha_limite")).toLocalDate(),"PENDIENTE".equals(r.get("estado")),ReglasSeguimiento.hoy())));
         var documentos=db.queryForList("""
             SELECT d.id,d.requisito_id,d.nombre_original,d.tipo_contenido,d.tamanio,
              d.cargado_en,r.nombre requisito

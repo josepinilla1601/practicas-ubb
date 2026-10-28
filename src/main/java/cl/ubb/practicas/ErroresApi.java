@@ -11,6 +11,8 @@ import java.util.*;
 
 @RestControllerAdvice
 public class ErroresApi {
+    @ExceptionHandler(jakarta.validation.ConstraintViolationException.class)
+    ResponseEntity<Map<String,Object>> parametros(Exception e) { return respuesta(HttpStatus.BAD_REQUEST,"Revisa los parámetros de consulta.",List.of()); }
     private ResponseEntity<Map<String,Object>> respuesta(HttpStatus estado,String mensaje,Object detalles) {
         return ResponseEntity.status(estado).body(Map.of("mensaje",mensaje,"detalles",detalles));
     }

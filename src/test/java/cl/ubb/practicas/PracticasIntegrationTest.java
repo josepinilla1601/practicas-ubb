@@ -128,6 +128,19 @@ class PracticasIntegrationTest {
    mvc.perform(get("/api/practicas").param("q","%' OR 1=1 --")).andExpect(jsonPath("$.length()").value(0));
    assertEquals(1,seguimiento(p).get("documentos").size());
   }
+  @Test void s209PlantillasConservanInstantaneaYPlazos()throws Exception{
+   var datos=Map.of("asignaturaId",asignatura("INI1"),"anio",2030,"semestre",2,"codigo","NUEVO","nombre","Requisito original","fechaLimite","2030-12-01");
+   crear("/plantillas",datos,201);
+   long p=practica("PLANT-1","INI1",2030);
+   long plantilla=db.queryForObject("SELECT r.id FROM requisitos_plantilla r JOIN periodos pe ON pe.id=r.periodo_id WHERE pe.anio=2030 AND r.codigo='NUEVO'",Long.class);
+   var edit=new java.util.HashMap<String,Object>(datos);edit.put("nombre","Requisito cambiado");
+   mvc.perform(put("/api/plantillas/"+plantilla).contentType("application/json").content(json.writeValueAsBytes(edit))).andExpect(status().isOk());
+   assertEquals("Requisito original",seguimiento(p).get("requisitos").get(0).get("nombre").asText());
+   long r=requisito(p);
+   mvc.perform(put("/api/requisitos/"+r+"/plazo").contentType("application/json").content("{\"fechaLimite\":\"2020-01-01\"}")).andExpect(status().isOk());
+   assertTrue(seguimiento(p).get("requisitos").get(0).get("vencido").asBoolean());
+   db.update("DELETE FROM requisitos_plantilla WHERE id=?",plantilla);
+  }
   @Test void s202AsignacionesPermisosYDesactivacion()throws Exception{
    long p=practica("PERM-1","INI1",2026);
    long estudiante=db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,p);
