@@ -38,7 +38,7 @@ class PracticasIntegrationTest {
   @Autowired PasswordEncoder encoder;
  @BeforeEach void limpiarSoloBaseTest(){
   assertTrue(db.queryForObject("SELECT DATABASE()",String.class).endsWith("_test"),"Las pruebas necesitan una base exclusiva terminada en _test.");
-   for(String tabla:new String[]{"documentos","requisitos_practica","practicas","usuarios","estudiantes","centros"})db.update("DELETE FROM "+tabla);
+   for(String tabla:new String[]{"revisiones","documentos","requisitos_practica","practicas","usuarios","estudiantes","centros"})db.update("DELETE FROM "+tabla);
    db.update("INSERT INTO usuarios(correo,nombre,clave_hash,rol) VALUES('coordinacion@test.example','Pruebas','no-utilizada','COORDINADOR')");
    mvc=MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).defaultRequest(get("/").with(csrf())).build();
  }
@@ -155,6 +155,37 @@ class PracticasIntegrationTest {
    mvc.perform(multipart("/api/practicas/"+ajena+"/requisitos/"+requisito(ajena)+"/documentos").file(new MockMultipartFile("archivo","x.pdf","application/pdf",pdf())).with(alumno)).andExpect(status().isNotFound());
    mvc.perform(multipart("/api/practicas/"+propia+"/requisitos/"+requisito(propia)+"/documentos").file(new MockMultipartFile("archivo","x.pdf","application/pdf",pdf())).with(alumno)).andExpect(status().isCreated());
    mvc.perform(get("/api/mi-panel")).andExpect(status().isForbidden());
+  }
+  JsonNode revisar(long documento,String decision,String comentario,int status)throws Exception{
+   var body=new java.util.HashMap<String,Object>();body.put("decision",decision);body.put("comentario",comentario);
+   return crear("/documentos/"+documento+"/revision",body,status);
+  }
+  JsonNode estadoRequisito(long p,long r)throws Exception{
+   for(var x:seguimiento(p).get("requisitos"))if(x.get("id").asLong()==r)return x;
+   throw new AssertionError("Requisito no encontrado");
+  }
+  @Test void s211RevisionCorreccionYNuevaVersionConservanHistorial()throws Exception{
+   long p=practica("REV-1","INI1",2026),r=requisito(p);
+   assertEquals("PENDIENTE",estadoRequisito(p,r).get("estado").asText());
+   long v1=subir(p,r,"v1.pdf",pdf(),201).get("id").asLong();
+   assertEquals("EN_REVISION",estadoRequisito(p,r).get("estado").asText());
+   revisar(v1,"OBSERVADO","",400);
+   revisar(v1,"OBSERVADO","Falta la bibliografía.",201);
+   revisar(v1,"APROBADO","",400);
+   assertEquals("OBSERVADO",estadoRequisito(p,r).get("estado").asText());
+   long v2=subir(p,r,"v2.pdf",pdf(),201).get("id").asLong();
+   revisar(v1,"APROBADO","",400);
+   revisar(v2,"APROBADO","Correcto.",201);
+   assertEquals("APROBADO",estadoRequisito(p,r).get("estado").asText());
+   subir(p,r,"v3.pdf",pdf(),400);
+   var docs=seguimiento(p).get("documentos");
+   assertEquals(2,docs.size());
+   assertEquals("Falta la bibliografía.",docs.get(1).get("comentario").asText());
+   assertEquals(2,docs.get(0).get("version").asInt());
+   long otra=practica("REV-2","INI1",2026);
+   long d=subir(otra,requisito(otra),"x.pdf",pdf(),201).get("id").asLong();
+   cuenta("revisor@test.example","PROFESOR_UBB",null);
+   mvc.perform(post("/api/documentos/"+d+"/revision").with(user("revisor@test.example").roles("PROFESOR_UBB")).contentType("application/json").content("{\"decision\":\"APROBADO\"}")).andExpect(status().isNotFound());
   }
   @Test void s202AsignacionesPermisosYDesactivacion()throws Exception{
    long p=practica("PERM-1","INI1",2026);

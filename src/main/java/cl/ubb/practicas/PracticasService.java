@@ -90,21 +90,37 @@ public class PracticasService {
         db.update("INSERT INTO requisitos_practica(practica_id,codigo,nombre,fecha_limite) SELECT ?,codigo,nombre,fecha_limite FROM requisitos_plantilla WHERE asignatura_id=? AND periodo_id=?",id,s.asignaturaId(),periodo);
         return practica(id);
     }
+    /** Requisitos con su estado calculado. El filtro siempre se arma en el servidor, nunca desde la interfaz. */
+    public List<Map<String,Object>> requisitos(String filtro,Object... args) {
+        var requisitos=db.queryForList("""
+            SELECT r.id,r.practica_id,r.codigo,r.nombre,r.fecha_limite,
+             (SELECT COUNT(*) FROM documentos d WHERE d.requisito_id=r.id) archivos,
+             (SELECT rv.decision FROM documentos d LEFT JOIN revisiones rv ON rv.documento_id=d.id
+              WHERE d.requisito_id=r.id ORDER BY d.id DESC LIMIT 1) decision
+            FROM requisitos_practica r JOIN practicas p ON p.id=r.practica_id WHERE """+" "+filtro+" ORDER BY r.practica_id,r.id",args);
+        var hoy=ReglasSeguimiento.hoy();
+        for(var r:requisitos) {
+            String estado=ReglasSeguimiento.estado(((Number)r.get("archivos")).longValue(),(String)r.get("decision"));
+            r.put("estado",estado);
+            r.put("vencido",ReglasSeguimiento.vencido(ReglasSeguimiento.fecha(r.get("fecha_limite")),ReglasSeguimiento.pendiente(estado),hoy));
+        }
+        return requisitos;
+    }
     public Map<String,Object> seguimiento(long id) {
         var practica=practica(id);
-        var requisitos=db.queryForList("""
-            SELECT r.id,r.codigo,r.nombre,r.fecha_limite,COUNT(d.id) archivos,
-             CASE WHEN COUNT(d.id)>0 THEN 'RECIBIDO' ELSE 'PENDIENTE' END estado
-            FROM requisitos_practica r LEFT JOIN documentos d ON d.requisito_id=r.id
-            WHERE r.practica_id=? GROUP BY r.id,r.codigo,r.nombre,r.fecha_limite ORDER BY r.id
-            """,id);
-        requisitos.forEach(r -> r.put("vencido",ReglasSeguimiento.vencido(r.get("fecha_limite")==null?null:((java.sql.Date)r.get("fecha_limite")).toLocalDate(),"PENDIENTE".equals(r.get("estado")),ReglasSeguimiento.hoy())));
+        var requisitos=requisitos("r.practica_id=?",id);
+        // S2-12: historial completo de versiones con su revisión, si existe.
         var documentos=db.queryForList("""
             SELECT d.id,d.requisito_id,d.nombre_original,d.tipo_contenido,d.tamanio,
-             d.cargado_en,r.nombre requisito
+             d.cargado_en,r.nombre requisito,
+             ROW_NUMBER() OVER (PARTITION BY d.requisito_id ORDER BY d.id) version,
+             d.id=(SELECT MAX(d2.id) FROM documentos d2 WHERE d2.requisito_id=d.requisito_id) ultima,
+             rv.decision,rv.comentario,rv.creado_en revisado_en,u.nombre revisor
             FROM documentos d JOIN requisitos_practica r ON r.id=d.requisito_id
+            LEFT JOIN revisiones rv ON rv.documento_id=d.id LEFT JOIN usuarios u ON u.id=rv.revisor_id
             WHERE r.practica_id=? ORDER BY d.cargado_en DESC,d.id DESC
             """,id);
+        documentos.forEach(d -> d.put("ultima",((Number)d.get("ultima")).intValue()==1));
         return Map.of("practica",practica,"requisitos",requisitos,"documentos",documentos,
             "configurado",!requisitos.isEmpty(),"nota","Los requisitos precargados son una propuesta de demostración por validar con el profesor.");
     }
@@ -113,6 +129,8 @@ public class PracticasService {
         acceso.exigir("COORDINADOR","ESTUDIANTE");
         practica(practicaId);
         uno("SELECT id FROM requisitos_practica WHERE id=? AND practica_id=?","El requisito no pertenece a esta práctica.",requisitoId,practicaId);
+        // S2-13: se pueden subir nuevas versiones; las anteriores se conservan. Un requisito aprobado queda cerrado.
+        if("APROBADO".equals(requisitos("r.id=?",requisitoId).get(0).get("estado")))throw Problema.invalido("Este requisito ya fue aprobado; no admite nuevas versiones.");
         if(archivo.isEmpty())throw Problema.invalido("Selecciona un archivo con contenido.");
         if(archivo.getSize()>10L*1024*1024)throw Problema.invalido("El archivo supera 10 MB.");
         String name=clean(archivo.getOriginalFilename()).replace('\\','/'); name=name.substring(name.lastIndexOf('/')+1).replaceAll("[\\p{Cntrl}]", "_");
