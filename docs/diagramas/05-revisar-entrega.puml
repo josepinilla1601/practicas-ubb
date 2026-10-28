@@ -1,0 +1,48 @@
+@startuml 05-revisar-entrega
+!include estilo.iuml
+title SD-05 — Aprobar una entrega o solicitar una corrección (S2-11, S2-12)
+
+actor "Profesor UBB" as PR
+participant "Interfaz web\n(revision.js)" as UI
+participant "RevisionController" as RV
+participant "Acceso" as AC
+participant "PracticasController" as PC
+participant "PracticasService" as PS
+database "MySQL" as DB
+
+PR -> UI : En "Revisar entregas" elige la versión,\nla decisión y escribe un comentario
+UI -> RV : POST /api/documentos/{id}/revision\n(Revision: decision, comentario)
+activate RV
+RV -> AC : exigir("COORDINADOR", "PROFESOR_UBB")
+RV -> DB : SELECT practica_id, requisito_id\nFROM documentos JOIN requisitos_practica
+RV -> AC : practica(practicaId)
+note right of AC : Solo prácticas asignadas\nal profesor conectado.
+RV -> DB : SELECT ... FROM requisitos_practica WHERE id = ? FOR UPDATE
+RV -> DB : SELECT MAX(id) FROM documentos WHERE requisito_id = ?
+
+alt No es la versión más reciente
+  RV --> UI : 400 "Solo se revisa la versión más reciente del requisito."
+else La versión ya tiene revisión
+  RV --> UI : 400 "Esta versión ya fue revisada."
+else OBSERVADO sin comentario
+  RV --> UI : 400 "Escribe la corrección que debe realizar el estudiante."
+else Revisión válida
+  RV -> AC : id()
+  RV -> DB : INSERT INTO revisiones\n(documento_id, revisor_id, decision, comentario)
+  RV --> UI : 201 "Entrega aprobada." | "Corrección solicitada al estudiante."
+end
+deactivate RV
+
+== Consultar el historial de revisión (S2-12) ==
+UI -> PC : GET /api/practicas/{id}/seguimiento
+activate PC
+PC -> PS : seguimiento(id)
+activate PS
+PS -> DB : requisitos con su estado calculado
+PS -> DB : documentos con número de versión,\ndecisión, comentario y revisor
+PS --> PC : {practica, requisitos, documentos}
+deactivate PS
+PC --> UI : 200
+deactivate PC
+UI --> PR : Historial con todas las versiones y sus revisiones
+@enduml

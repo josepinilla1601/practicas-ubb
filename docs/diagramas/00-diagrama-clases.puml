@@ -1,0 +1,229 @@
+@startuml 00-diagrama-clases
+' Diagrama de clases del backend (paquete cl.ubb.practicas), generado a partir del código del Sprint 2.
+!pragma layout smetana
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #127562
+  ArrowColor #17313B
+}
+skinparam package {
+  BorderColor #9DB8B0
+  FontColor #17313B
+}
+title Prácticas UBB — Diagrama de clases (Sprint 2)
+
+package "Controladores REST (/api)" {
+  class CuentaController <<RestController>> {
+    + sesion(csrf) : Map
+    + clave(CambioClave, request) : Map
+    ~ {static} validarClave(clave) : void
+  }
+  class UsuariosController <<RestController>> {
+    + listar() : List
+    + crear(Cuenta) : Map
+    + activar(id, Activacion) : Map
+    + asignar(practicaId, Asignacion) : Map
+    - validarDocente(id, rol) : void
+  }
+  class PracticasController <<RestController>> {
+    + resumen() : Map
+    + estudiantes() / crearEstudiante() / editarEstudiante()
+    + centros() / crearCentro() / editarCentro()
+    + practicas(q, asignaturaId, anio, semestre) : List
+    + crearPractica(Solicitudes.Practica) : Map
+    + seguimiento(id) : Map
+    + adjuntar(id, requisitoId, archivo) : Map
+    + descargar(id) : ResponseEntity
+  }
+  class RequisitosController <<RestController>> {
+    + listar(asignaturaId, anio, semestre) : List
+    + crear(Plantilla) : Map
+    + editar(id, Plantilla) : Map
+    + configurar(practicaId) : Map
+    + plazo(requisitoId, Plazo) : Map
+  }
+  class PortalEstudianteController <<RestController>> {
+    + panel() : Map
+  }
+  class RevisionController <<RestController>> {
+    + revisar(documentoId, Revision) : Map
+  }
+  class EvaluacionController <<RestController>> {
+    + listar(practicaId) : List
+    + registrar(practicaId, Evaluacion) : Map
+  }
+  class IndicadoresController <<RestController>> {
+    + indicadores() : Map
+    - {static} sumar(mapa, clave) : void
+  }
+  class MaterialController <<RestController>> {
+    + listar(asignaturaId, anio, semestre) : List
+    + detalle(id) : Map
+    + cargar(archivo, titulo, asignaturaId, anio, semestre) : Map
+    + estado(id, Estado) : Map
+    + descargar(id) : ResponseEntity
+  }
+  class AsistenteController <<RestController>> {
+    + preguntar(Pregunta) : Map
+    + historial() : List
+    ~ {static} preguntaPorPlazos(pregunta) : boolean
+    - plazos() : Map
+    - material(usuario, pregunta) : Map
+  }
+}
+
+package "Servicios" {
+  class PracticasService <<Service>> {
+    + estudiantes() / estudiante(id)
+    + crearEstudiante(s) / editarEstudiante(id, s)
+    + centros() / crearCentro(s) / editarCentro(id, s)
+    + practicas() : List
+    + buscarPracticas(q, asignaturaId, anio, semestre) : List
+    + practica(id) : Map
+    + crearPractica(Solicitudes.Practica) : Map
+    + requisitos(filtro, args) : List
+    + seguimiento(id) : Map
+    + adjuntar(practicaId, requisitoId, archivo) : Map
+    + descargar(id) : Archivo
+    + resumen() : Map
+  }
+  class Acceso <<Service>> {
+    + actual() : Map
+    + id() : long
+    + rol() : String
+    + exigir(roles...) : void
+    + filtroPracticas() : Filtro
+    + practica(id) : void
+  }
+}
+
+package "Reglas y utilidades" {
+  class ReglasSeguimiento <<utility>> {
+    + {static} ZONA : ZoneId
+    + {static} hoy() : LocalDate
+    + {static} estado(archivos, ultimaDecision) : String
+    + {static} pendiente(estado) : boolean
+    + {static} vencido(limite, pendiente, hoy) : boolean
+    + {static} fecha(valor) : LocalDate
+  }
+  class TextoMaterial <<utility>> {
+    + {static} MAXIMO_FRAGMENTO : int = 900
+    + {static} extraer(nombre, bytes) : Extraccion
+    + {static} fragmentar(texto) : List<String>
+    ~ {static} normalizar(texto) : String
+  }
+  class BuscadorMaterial <<utility>> {
+    + {static} sinTildes(texto) : String
+    + {static} palabras(texto) : List<String>
+    + {static} buscar(pregunta, fragmentos, maximo) : List<Resultado>
+    ~ {static} extracto(texto, consulta) : String
+  }
+}
+
+package "Configuración y errores" {
+  class SeguridadConfig <<Configuration>> {
+    + passwordEncoder() : PasswordEncoder
+    + usuariosLogin(db) : UserDetailsService
+    + seguridad(http, db) : SecurityFilterChain
+  }
+  class InicializarCoordinador <<Component>> {
+    + run(args) : void
+  }
+  class ErroresApi <<RestControllerAdvice>> {
+    ~ negocio(Problema) : ResponseEntity
+    ~ validacion(e) : ResponseEntity
+    ~ integridad(e) : ResponseEntity
+  }
+  class Problema <<RuntimeException>> {
+    + estado : HttpStatus
+    + {static} invalido(mensaje) : Problema
+    + {static} noExiste(mensaje) : Problema
+  }
+}
+
+package "Datos de entrada y salida (records)" {
+  class "Solicitudes.Estudiante" as SolEst <<record>>
+  class "Solicitudes.Centro" as SolCen <<record>>
+  class "Solicitudes.Practica" as SolPra <<record>>
+  class "Acceso.Filtro" as Filtro <<record>> {
+    sql : String
+    args : Object[]
+  }
+  class "TextoMaterial.Extraccion" as Extraccion <<record>> {
+    tipo : String
+    texto : String
+  }
+  class "BuscadorMaterial.Fragmento" as Fragmento <<record>> {
+    materialId : long
+    titulo : String
+    orden : int
+    texto : String
+  }
+  class "BuscadorMaterial.Resultado" as Resultado <<record>> {
+    puntaje : double
+    extracto : String
+  }
+}
+
+class JdbcTemplate <<Spring>>
+class PasswordEncoder <<Spring>>
+class PDFTextStripper <<PDFBox>>
+
+' Dependencias principales
+PracticasController --> PracticasService
+PortalEstudianteController --> PracticasService
+IndicadoresController --> PracticasService
+AsistenteController --> PracticasService
+
+CuentaController --> Acceso
+UsuariosController --> Acceso
+RequisitosController --> Acceso
+PortalEstudianteController --> Acceso
+RevisionController --> Acceso
+EvaluacionController --> Acceso
+IndicadoresController --> Acceso
+MaterialController --> Acceso
+AsistenteController --> Acceso
+PracticasService --> Acceso
+
+PracticasService ..> ReglasSeguimiento
+PortalEstudianteController ..> ReglasSeguimiento
+AsistenteController ..> ReglasSeguimiento
+AsistenteController ..> BuscadorMaterial
+MaterialController ..> TextoMaterial
+TextoMaterial ..> PDFTextStripper : extrae texto
+
+UsuariosController ..> CuentaController : validarClave()
+InicializarCoordinador ..> CuentaController : validarClave()
+CuentaController --> PasswordEncoder
+UsuariosController --> PasswordEncoder
+InicializarCoordinador --> PasswordEncoder
+SeguridadConfig ..> PasswordEncoder : crea (BCrypt)
+
+PracticasController ..> SolEst
+PracticasController ..> SolCen
+PracticasController ..> SolPra
+Acceso ..> Filtro : crea
+TextoMaterial ..> Extraccion : crea
+BuscadorMaterial ..> Resultado : crea
+Resultado --> Fragmento
+
+PracticasService --> JdbcTemplate
+Acceso --> JdbcTemplate
+SeguridadConfig ..> JdbcTemplate
+InicializarCoordinador --> JdbcTemplate
+
+ErroresApi ..> Problema : traduce a HTTP
+PracticasService ..> Problema : lanza
+Acceso ..> Problema : lanza
+
+note bottom of JdbcTemplate
+  Los controladores de requisitos, cuentas, revisión,
+  evaluación, material y asistente también consultan
+  MySQL directamente mediante JdbcTemplate.
+end note
+@enduml

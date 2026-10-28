@@ -1,0 +1,48 @@
+@startuml 07-indicadores
+!include estilo.iuml
+title SD-07 — Consultar indicadores de avance, revisión y atraso (S2-15)
+
+actor "Coordinador /\nProfesor UBB" as US
+participant "Interfaz web\n(indicadores.js)" as UI
+participant "IndicadoresController" as IC
+participant "Acceso" as AC
+participant "PracticasService" as PS
+participant "ReglasSeguimiento" as RS
+database "MySQL" as DB
+
+US -> UI : Abre "Indicadores"
+UI -> IC : GET /api/indicadores
+activate IC
+IC -> AC : exigir("COORDINADOR", "PROFESOR_UBB")
+IC -> AC : filtroPracticas()
+AC --> IC : Filtro (todas, o solo las asignadas al profesor)
+IC -> PS : practicas()
+activate PS
+PS -> DB : SELECT prácticas autorizadas
+PS --> IC : lista de prácticas
+deactivate PS
+IC -> PS : requisitos(filtro.sql, filtro.args)
+activate PS
+PS -> DB : requisitos con cantidad de versiones\ny decisión de la última revisión
+loop por cada requisito
+  PS -> RS : estado(archivos, ultimaDecision)
+  PS -> RS : vencido(fecha_limite, pendiente(estado), hoy())
+end
+PS --> IC : requisitos con estado y vencido
+deactivate PS
+loop por cada requisito
+  IC -> IC : suma por práctica y en los totales:\npendiente, en revisión, observado, aprobado, vencidos
+end
+loop por cada práctica
+  IC -> IC : situación = SIN_CONFIGURAR | COMPLETA\n| CON_ATRASO | EN_CURSO
+end
+IC --> UI : 200 {totales, practicas}
+deactivate IC
+UI --> US : Tarjetas con totales y tabla por práctica
+
+note over IC, RS
+  Usa las mismas reglas que el seguimiento individual (ReglasSeguimiento),
+  por eso los números coinciden. Una práctica sin requisitos
+  nunca se cuenta como completa.
+end note
+@enduml

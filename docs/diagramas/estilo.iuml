@@ -1,0 +1,24 @@
+' Estilo común de los diagramas de secuencia.
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam sequenceMessageAlign left
+skinparam responseMessageBelowArrow true
+skinparam ParticipantPadding 12
+skinparam BoxPadding 8
+skinparam sequence {
+  ArrowColor #17313B
+  LifeLineBorderColor #9DB8B0
+  ParticipantBorderColor #127562
+  ParticipantBackgroundColor #FFFFFF
+  ActorBorderColor #127562
+  ActorBackgroundColor #E9F4EF
+  DatabaseBorderColor #127562
+  DatabaseBackgroundColor #E9F4EF
+  GroupBorderColor #9DB8B0
+  GroupBackgroundColor #F4F7F6
+}
+skinparam note {
+  BackgroundColor #FFFAF0
+  BorderColor #D8B164
+}
+autonumber

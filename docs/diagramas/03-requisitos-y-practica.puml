@@ -1,0 +1,59 @@
+@startuml 03-requisitos-y-practica
+!include estilo.iuml
+title SD-03 — Configurar requisitos del período y registrar una práctica (S2-09, S2-10)
+
+actor "Coordinador" as CO
+participant "Interfaz web\n(requisitos.js /\nacademico.js)" as UI
+participant "RequisitosController" as RC
+participant "PracticasController" as PC
+participant "PracticasService" as PS
+participant "Acceso" as AC
+database "MySQL" as DB
+
+== Agregar un requisito a la plantilla ==
+CO -> UI : Elige asignatura, año y semestre;\nescribe código, nombre y fecha límite
+UI -> RC : POST /api/plantillas (Plantilla)
+activate RC
+RC -> AC : exigir("COORDINADOR")
+RC -> DB : SELECT COUNT(*) FROM asignaturas WHERE id = ?
+RC -> DB : INSERT IGNORE INTO periodos (anio, semestre)
+RC -> DB : SELECT id FROM periodos WHERE anio = ? AND semestre = ?
+RC -> DB : INSERT INTO requisitos_plantilla\n(asignatura_id, periodo_id, codigo, nombre, fecha_limite)
+RC --> UI : 201 "Requisito agregado a la plantilla."
+deactivate RC
+
+== Registrar una práctica de ese período ==
+CO -> UI : Elige estudiante, asignatura, período y centro
+UI -> PC : POST /api/practicas (Solicitudes.Practica)
+activate PC
+PC -> PS : crearPractica(datos)
+activate PS
+PS -> AC : exigir("COORDINADOR")
+PS -> DB : SELECT estudiante / asignatura
+opt La asignatura requiere centro y no se indicó
+  PS --> PC : Problema 400 "Esta asignatura requiere un centro de práctica."
+end
+PS -> DB : INSERT IGNORE INTO periodos; SELECT id
+PS -> DB : INSERT INTO practicas (...)
+PS -> DB : INSERT INTO requisitos_practica (practica_id, codigo, nombre, fecha_limite)\nSELECT ... FROM requisitos_plantilla\nWHERE asignatura_id = ? AND periodo_id = ?
+note right of DB
+  Se copia la plantilla: si después se edita,
+  las prácticas existentes conservan su lista.
+end note
+PS --> PC : práctica creada
+deactivate PS
+PC --> UI : 201 práctica
+deactivate PC
+UI --> CO : Abre el seguimiento con los requisitos y plazos
+
+== Ajustar un plazo de esa práctica ==
+CO -> UI : Cambia la fecha límite de un requisito
+UI -> RC : PUT /api/requisitos/{id}/plazo (Plazo)
+activate RC
+RC -> AC : exigir("COORDINADOR", "PROFESOR_UBB")
+RC -> DB : SELECT practica_id FROM requisitos_practica WHERE id = ?
+RC -> AC : practica(practicaId)
+RC -> DB : UPDATE requisitos_practica SET fecha_limite = ?
+RC --> UI : 200 "Plazo actualizado."
+deactivate RC
+@enduml
