@@ -32,11 +32,21 @@ public class PracticasService {
         long id=insert("INSERT INTO estudiantes(identificador,nombres,apellidos,correo) VALUES(?,?,?,?)",clean(s.identificador()).toUpperCase(Locale.ROOT),clean(s.nombres()),clean(s.apellidos()),clean(s.correo()).toLowerCase(Locale.ROOT));
         return estudiante(id);
     }
+    public Map<String,Object> editarEstudiante(long id,Solicitudes.Estudiante s) {
+        estudiante(id);
+        db.update("UPDATE estudiantes SET identificador=?,nombres=?,apellidos=?,correo=? WHERE id=?",clean(s.identificador()).toUpperCase(Locale.ROOT),clean(s.nombres()),clean(s.apellidos()),clean(s.correo()).toLowerCase(Locale.ROOT),id);
+        return estudiante(id);
+    }
     public List<Map<String,Object>> centros() { acceso.exigir("COORDINADOR");return db.queryForList("SELECT * FROM centros ORDER BY nombre,id"); }
     public Map<String,Object> centro(long id) { acceso.exigir("COORDINADOR");return uno("SELECT * FROM centros WHERE id=?","El centro no existe.",id); }
     public Map<String,Object> crearCentro(Solicitudes.Centro s) {
         acceso.exigir("COORDINADOR");
         long id=insert("INSERT INTO centros(nombre,comuna,direccion,contacto,correo,telefono) VALUES(?,?,?,?,?,?)",clean(s.nombre()),clean(s.comuna()),clean(s.direccion()),clean(s.contacto()),clean(s.correo()),clean(s.telefono()));
+        return centro(id);
+    }
+    public Map<String,Object> editarCentro(long id,Solicitudes.Centro s) {
+        centro(id);
+        db.update("UPDATE centros SET nombre=?,comuna=?,direccion=?,contacto=?,correo=?,telefono=? WHERE id=?",clean(s.nombre()),clean(s.comuna()),clean(s.direccion()),clean(s.contacto()),clean(s.correo()),clean(s.telefono()),id);
         return centro(id);
     }
     public List<Map<String,Object>> asignaturas() { return db.queryForList("SELECT * FROM asignaturas ORDER BY id"); }
@@ -52,6 +62,19 @@ public class PracticasService {
         LEFT JOIN centros c ON c.id=p.centro_id
         """;
     public List<Map<String,Object>> practicas() { var f=acceso.filtroPracticas();return db.queryForList(PRACTICAS+" WHERE "+f.sql()+" ORDER BY p.id DESC",f.args()); }
+    public List<Map<String,Object>> buscarPracticas(String busqueda,Long asignaturaId,Integer anio,Integer semestre) {
+        var f=acceso.filtroPracticas();StringBuilder sql=new StringBuilder(PRACTICAS+" WHERE "+f.sql());
+        var args=new ArrayList<>(Arrays.asList(f.args()));
+        if(busqueda!=null && !busqueda.isBlank()) {
+            if(busqueda.length()>150)throw Problema.invalido("La búsqueda admite hasta 150 caracteres.");
+            String q="%"+busqueda.strip().replace("!","!!").replace("%","!%").replace("_","!_")+"%";
+            sql.append(" AND (CONCAT(e.nombres,' ',e.apellidos) LIKE ? ESCAPE '!' OR e.identificador LIKE ? ESCAPE '!')");args.add(q);args.add(q);
+        }
+        if(asignaturaId!=null){sql.append(" AND p.asignatura_id=?");args.add(asignaturaId);}
+        if(anio!=null){sql.append(" AND pe.anio=?");args.add(anio);}
+        if(semestre!=null){if(semestre<1||semestre>2)throw Problema.invalido("Semestre inválido.");sql.append(" AND pe.semestre=?");args.add(semestre);}
+        return db.queryForList(sql+" ORDER BY p.id DESC",args.toArray());
+    }
     public Map<String,Object> practica(long id) { acceso.practica(id);return uno(PRACTICAS+" WHERE p.id=?","La práctica no existe.",id); }
     @Transactional
     public Map<String,Object> crearPractica(Solicitudes.Practica s) {

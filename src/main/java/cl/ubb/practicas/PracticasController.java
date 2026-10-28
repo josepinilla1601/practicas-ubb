@@ -19,11 +19,13 @@ public class PracticasController {
     @GetMapping("/estudiantes/{id}") public Map<String,Object> estudiante(@PathVariable long id){return servicio.estudiante(id);}
     @PostMapping("/estudiantes") @ResponseStatus(HttpStatus.CREATED)
     public Map<String,Object> crearEstudiante(@Valid @RequestBody Solicitudes.Estudiante datos){return servicio.crearEstudiante(datos);}
+    @PutMapping("/estudiantes/{id}") public Map<String,Object> editarEstudiante(@PathVariable long id,@Valid @RequestBody Solicitudes.Estudiante datos){return servicio.editarEstudiante(id,datos);}
     @GetMapping("/centros") public List<Map<String,Object>> centros(){return servicio.centros();}
     @GetMapping("/centros/{id}") public Map<String,Object> centro(@PathVariable long id){return servicio.centro(id);}
     @PostMapping("/centros") @ResponseStatus(HttpStatus.CREATED)
     public Map<String,Object> crearCentro(@Valid @RequestBody Solicitudes.Centro datos){return servicio.crearCentro(datos);}
-    @GetMapping("/practicas") public List<Map<String,Object>> practicas(){return servicio.practicas();}
+    @PutMapping("/centros/{id}") public Map<String,Object> editarCentro(@PathVariable long id,@Valid @RequestBody Solicitudes.Centro datos){return servicio.editarCentro(id,datos);}
+    @GetMapping("/practicas") public List<Map<String,Object>> practicas(@RequestParam(required=false) String q,@RequestParam(required=false) Long asignaturaId,@RequestParam(required=false) Integer anio,@RequestParam(required=false) Integer semestre){return servicio.buscarPracticas(q,asignaturaId,anio,semestre);}
     @GetMapping("/practicas/{id}") public Map<String,Object> practica(@PathVariable long id){return servicio.practica(id);}
     @PostMapping("/practicas") @ResponseStatus(HttpStatus.CREATED)
     public Map<String,Object> crearPractica(@Valid @RequestBody Solicitudes.Practica datos){return servicio.crearPractica(datos);}
