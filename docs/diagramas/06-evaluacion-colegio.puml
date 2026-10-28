@@ -1,0 +1,47 @@
+@startuml 06-evaluacion-colegio
+!include estilo.iuml
+title SD-06 — Registrar y consultar la evaluación del profesor de colegio (S2-14)
+
+actor "Profesor de colegio" as PC
+actor "Profesor UBB" as PU
+participant "Interfaz web\n(evaluacion.js)" as UI
+participant "EvaluacionController" as EC
+participant "Acceso" as AC
+database "MySQL" as DB
+
+== Registrar la evaluación ==
+PC -> UI : Escribe fortalezas, aspectos por mejorar\ny recomendaciones del practicante
+UI -> EC : POST /api/practicas/{id}/evaluaciones (Evaluacion)
+activate EC
+EC -> AC : exigir("PROFESOR_COLEGIO")
+EC -> AC : practica(id)
+activate AC
+AC -> DB : SELECT COUNT(*) FROM practicas p\nWHERE p.profesor_colegio_id = ? AND p.id = ?
+alt La práctica no está asignada a este profesor
+  AC --> EC : Problema 404
+  EC --> UI : 404 "La práctica no existe o no está asignada a tu cuenta."
+else Asignada
+  AC --> EC : autorizado
+  deactivate AC
+  EC -> AC : id()
+  EC -> DB : INSERT INTO evaluaciones_colegio\n(practica_id, autor_id, fortalezas, aspectos_mejora, recomendaciones)
+  EC --> UI : 201 "Evaluación registrada. Las anteriores se conservan."
+end
+deactivate EC
+
+== Consultar la evaluación ==
+PU -> UI : Abre el seguimiento de su practicante
+UI -> EC : GET /api/practicas/{id}/evaluaciones
+activate EC
+EC -> AC : exigir("COORDINADOR", "PROFESOR_UBB", "PROFESOR_COLEGIO")
+EC -> AC : practica(id)
+EC -> DB : SELECT ev.*, u.nombre autor FROM evaluaciones_colegio ev\nJOIN usuarios u ... WHERE practica_id = ?
+EC --> UI : 200 lista de evaluaciones (autor y fecha)
+deactivate EC
+UI --> PU : Muestra las evaluaciones del colegio
+
+note over UI, DB
+  Evaluación cualitativa: no calcula ni reemplaza la nota oficial.
+  El estudiante no tiene acceso a este recurso (403).
+end note
+@enduml

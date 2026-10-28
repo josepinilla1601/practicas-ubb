@@ -1,0 +1,47 @@
+@startuml 04-entregar-documento
+!include estilo.iuml
+title SD-04 — Entregar un documento o una versión corregida (S2-04, S2-13)
+
+actor "Estudiante" as ES
+participant "Interfaz web\n(portal.js /\nrevision.js)" as UI
+participant "PracticasController" as PC
+participant "PracticasService" as PS
+participant "Acceso" as AC
+participant "ReglasSeguimiento" as RS
+database "MySQL" as DB
+
+ES -> UI : En Mi panel abre su práctica,\nelige el requisito y el archivo
+UI -> PC : POST /api/practicas/{id}/requisitos/{requisitoId}/documentos\n(multipart: archivo)
+activate PC
+PC -> PS : adjuntar(practicaId, requisitoId, archivo)
+activate PS
+PS -> AC : exigir("COORDINADOR", "ESTUDIANTE")
+PS -> AC : practica(practicaId)
+activate AC
+AC -> DB : SELECT COUNT(*) FROM practicas p\nWHERE p.estudiante_id = ? AND p.id = ?
+note right : El filtro sale de la cuenta conectada,\nnunca de lo que envía la interfaz.
+AC --> PS : autorizado
+deactivate AC
+PS -> DB : SELECT id FROM requisitos_practica\nWHERE id = ? AND practica_id = ?
+PS -> PS : requisitos("r.id = ?", requisitoId)
+PS -> DB : cantidad de versiones y\ndecisión de la última revisión
+PS -> RS : estado(archivos, ultimaDecision)
+RS --> PS : PENDIENTE | EN_REVISION | OBSERVADO | APROBADO
+
+alt El requisito ya está APROBADO
+  PS --> PC : Problema 400 "Este requisito ya fue aprobado;\nno admite nuevas versiones."
+else Archivo vacío, mayor a 10 MB o formato no permitido
+  PS --> PC : Problema 400 (mensaje de validación)
+else Archivo válido (cabecera PDF o estructura Office comprobada)
+  PS -> DB : INSERT INTO documentos\n(requisito_id, nombre_original, tipo_contenido, tamanio, contenido)
+  note right of DB
+    Cada archivo es una versión nueva.
+    Las anteriores se conservan.
+  end note
+  PS --> PC : {id, nombre_original, tamanio}
+end
+deactivate PS
+PC --> UI : 201 documento | 400/404 con mensaje
+deactivate PC
+UI --> ES : Recarga el seguimiento: el requisito queda "En revisión"
+@enduml

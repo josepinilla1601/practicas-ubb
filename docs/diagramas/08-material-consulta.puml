@@ -1,0 +1,58 @@
+@startuml 08-material-consulta
+!include estilo.iuml
+title SD-08 — Cargar, procesar y publicar material de consulta (S2-16, S2-17)
+
+actor "Profesor UBB /\nCoordinador" as PR
+participant "Interfaz web\n(material.js)" as UI
+participant "MaterialController" as MC
+participant "Acceso" as AC
+participant "TextoMaterial" as TM
+participant "PDFBox\n(PDFTextStripper)" as PDF
+database "MySQL" as DB
+
+== Cargar y procesar ==
+PR -> UI : Sube un PDF, TXT o MD con título,\nasignatura y período
+UI -> MC : POST /api/materiales (multipart)
+activate MC
+MC -> AC : exigir("COORDINADOR", "PROFESOR_UBB")
+MC -> DB : SELECT COUNT(*) FROM asignaturas WHERE id = ?
+MC -> TM : extraer(nombre, bytes)
+activate TM
+alt Archivo PDF
+  TM -> PDF : Loader.loadPDF(bytes) / getText()
+  PDF --> TM : texto
+else Archivo TXT o MD
+  TM -> TM : decodificar en UTF-8
+end
+TM -> TM : normalizar(texto)
+alt Texto insuficiente (por ejemplo, PDF escaneado)
+  TM --> MC : Problema 400 "No se encontró texto suficiente..."
+  MC --> UI : 400 con el mensaje
+else Texto extraído
+  TM --> MC : Extraccion(tipo, texto)
+  deactivate TM
+  MC -> TM : fragmentar(texto)
+  TM --> MC : fragmentos de hasta 900 caracteres
+  MC -> DB : INSERT IGNORE INTO periodos; SELECT id
+  MC -> DB : INSERT INTO materiales (..., texto, estado = 'BORRADOR')
+  loop por cada fragmento
+    MC -> DB : INSERT INTO material_fragmentos (material_id, orden, texto)
+  end
+  MC --> UI : 201 {id, fragmentos, "Queda como borrador"}
+end
+deactivate MC
+UI --> PR : Muestra el texto extraído para revisarlo
+
+== Publicar o retirar ==
+PR -> UI : Pulsa "Publicar" o "Retirar"
+UI -> MC : PATCH /api/materiales/{id}/estado (PUBLICADO | RETIRADO)
+activate MC
+MC -> AC : exigir("COORDINADOR", "PROFESOR_UBB")
+MC -> DB : UPDATE materiales SET estado = ?, actualizado_en = NOW()
+MC --> UI : 200 "Material publicado: el asistente ya puede usarlo."
+deactivate MC
+
+note over MC, DB
+  El asistente solo lee fragmentos de materiales con estado PUBLICADO.
+end note
+@enduml

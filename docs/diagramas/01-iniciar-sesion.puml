@@ -1,0 +1,49 @@
+@startuml 01-iniciar-sesion
+!include estilo.iuml
+title SD-01 — Iniciar sesión (S2-01)
+
+actor "Usuario" as U
+participant "Interfaz web\n(app.js)" as UI
+participant "Spring Security\n(filtro de login)" as SEC
+participant "SeguridadConfig\n.usuariosLogin" as UDS
+participant "BCryptPasswordEncoder" as ENC
+participant "CuentaController" as CC
+participant "Acceso" as AC
+database "MySQL" as DB
+
+U -> UI : Ingresa correo y contraseña
+UI -> SEC : POST /api/login (correo, contraseña, token CSRF)
+activate SEC
+SEC -> UDS : loadUserByUsername(correo)
+activate UDS
+UDS -> DB : SELECT correo, clave_hash, rol, activo\nFROM usuarios WHERE correo = ?
+DB --> UDS : fila del usuario
+UDS --> SEC : UserDetails (rol, activo)
+deactivate UDS
+SEC -> ENC : matches(contraseña, clave_hash)
+ENC --> SEC : resultado
+
+alt Credenciales correctas y cuenta activa
+  SEC --> UI : 200 {"mensaje": "Sesión iniciada."}\n+ cookie de sesión
+  deactivate SEC
+  UI -> CC : GET /api/sesion
+  activate CC
+  CC -> AC : actual()
+  activate AC
+  AC -> DB : SELECT id, correo, nombre, rol, estudiante_id\nFROM usuarios WHERE correo = ? AND activo = TRUE
+  DB --> AC : usuario
+  AC --> CC : usuario
+  deactivate AC
+  CC --> UI : {csrf, usuario}
+  deactivate CC
+  UI --> U : Muestra el menú según su rol\n(Mi panel si es estudiante)
+else Contraseña incorrecta o cuenta desactivada
+  SEC --> UI : 401 "Correo o contraseña incorrectos,\no cuenta desactivada."
+  UI --> U : Muestra el error en el formulario
+end
+
+note over SEC, DB
+  En cada petición posterior, un filtro vuelve a comprobar en MySQL
+  que la cuenta siga activa; si fue desactivada, invalida la sesión (401).
+end note
+@enduml

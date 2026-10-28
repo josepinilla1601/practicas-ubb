@@ -1,0 +1,67 @@
+@startuml 09-asistente
+!include estilo.iuml
+title SD-09 — Consultar al asistente: material con fuentes, plazos e historial (S2-18, S2-19, S2-20)
+
+actor "Estudiante" as ES
+participant "Interfaz web\n(asistente.js)" as UI
+participant "AsistenteController" as AS
+participant "Acceso" as AC
+participant "PracticasService" as PS
+participant "ReglasSeguimiento" as RS
+participant "BuscadorMaterial" as BM
+database "MySQL" as DB
+
+ES -> UI : Escribe una pregunta
+UI -> AS : POST /api/asistente (Pregunta)
+activate AS
+AS -> AC : actual()
+AC --> AS : usuario (id, rol)
+AS -> AS : preguntaPorPlazos(pregunta)
+
+alt Estudiante pregunta por pendientes o plazos (S2-19)
+  AS -> AS : plazos()
+  AS -> AC : filtroPracticas()
+  AC --> AS : Filtro (solo sus prácticas)
+  AS -> PS : practicas()
+  PS -> DB : SELECT sus prácticas
+  AS -> PS : requisitos(filtro.sql, filtro.args)
+  PS -> DB : requisitos con versiones y última decisión
+  PS -> RS : estado(...) / vencido(...)
+  PS --> AS : requisitos con estado
+  AS -> RS : pendiente(estado)
+  AS -> AS : arma la lista ordenada por plazo\n(fuera de plazo, corrección solicitada)
+  note right of AS : tipo = PLAZOS\nfuente = "Tu seguimiento de prácticas"
+else Pregunta sobre el material (S2-18)
+  AS -> AS : material(usuario, pregunta)
+  AS -> AC : filtroPracticas()
+  AS -> DB : SELECT fragmentos de materiales PUBLICADOS\nde la asignatura y período de sus prácticas
+  DB --> AS : List<Fragmento>
+  AS -> BM : buscar(pregunta, fragmentos, 3)
+  activate BM
+  BM -> BM : palabras(pregunta): sin tildes,\nsin palabras vacías, plural a singular
+  BM -> BM : puntaje por coincidencias ponderadas\ny cobertura mínima de la pregunta
+  BM -> BM : extracto(texto, consulta)
+  BM --> AS : List<Resultado> (máximo 3)
+  deactivate BM
+  alt Hay resultados
+    AS -> AS : respuesta con extractos numerados [1], [2], [3]
+    note right of AS : tipo = MATERIAL\nfuentes = título y fragmento
+  else Sin resultados
+    AS -> AS : "No encontré información suficiente..."
+    note right of AS : tipo = SIN_RESPALDO\n(no inventa respuestas)
+  end
+end
+
+AS -> DB : INSERT INTO asistente_mensajes\n(usuario_id, pregunta, respuesta, tipo, fuentes)
+AS --> UI : 200 {tipo, respuesta, fuentes, pregunta}
+deactivate AS
+
+== Ver el historial personal (S2-20) ==
+UI -> AS : GET /api/asistente/historial
+activate AS
+AS -> AC : id()
+AS -> DB : SELECT ... FROM asistente_mensajes\nWHERE usuario_id = ? ORDER BY id DESC LIMIT 50
+AS --> UI : 200 mensajes propios (solo los del usuario conectado)
+deactivate AS
+UI --> ES : Muestra la conversación con sus fuentes
+@enduml

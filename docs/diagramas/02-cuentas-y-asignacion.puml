@@ -1,0 +1,56 @@
+@startuml 02-cuentas-y-asignacion
+!include estilo.iuml
+title SD-02 — Crear cuenta y asignar docentes a una práctica (S2-02, S2-03)
+
+actor "Coordinador" as CO
+participant "Interfaz web\n(usuarios.js)" as UI
+participant "UsuariosController" as UC
+participant "Acceso" as AC
+participant "CuentaController" as CC
+participant "PasswordEncoder" as ENC
+database "MySQL" as DB
+
+== Crear una cuenta ==
+CO -> UI : Completa nombre, correo, contraseña inicial y rol
+UI -> UC : POST /api/usuarios (Cuenta)
+activate UC
+UC -> AC : exigir("COORDINADOR")
+UC -> CC : validarClave(clave)
+alt rol = ESTUDIANTE
+  UC -> DB : SELECT COUNT(*) FROM estudiantes WHERE id = ?
+  DB --> UC : existe
+  opt El estudiante no existe
+    UC --> UI : 400 "Selecciona un estudiante registrado."
+  end
+end
+UC -> ENC : encode(clave)
+ENC --> UC : clave_hash (BCrypt)
+UC -> DB : INSERT INTO usuarios (nombre, correo, clave_hash, rol, estudiante_id)
+UC -> DB : SELECT ... FROM usuarios WHERE correo = ?
+DB --> UC : cuenta creada
+UC --> UI : 201 cuenta
+deactivate UC
+UI --> CO : La cuenta aparece en la lista
+
+== Asignar profesores a una práctica ==
+CO -> UI : Elige profesor UBB y profesor de colegio
+UI -> UC : PUT /api/practicas/{id}/docentes (Asignacion)
+activate UC
+UC -> AC : exigir("COORDINADOR")
+UC -> AC : practica(id)
+UC -> UC : validarDocente(profesorUbbId, "PROFESOR_UBB")
+UC -> DB : SELECT COUNT(*) FROM usuarios\nWHERE id = ? AND rol = ? AND activo = TRUE
+opt Se eligió profesor de colegio
+  UC -> UC : validarDocente(profesorColegioId, "PROFESOR_COLEGIO")
+end
+UC -> DB : SELECT nombre FROM usuarios WHERE id = ?
+UC -> DB : UPDATE practicas SET profesor_ubb_id, profesor_colegio_id,\nprofesor_responsable WHERE id = ?
+UC --> UI : 200 "Docentes asignados. Los documentos se conservaron."
+deactivate UC
+UI --> CO : Recarga el seguimiento
+
+note right of AC
+  Desde ese momento, Acceso.filtroPracticas()
+  muestra la práctica solo a los docentes asignados.
+end note
+@enduml
