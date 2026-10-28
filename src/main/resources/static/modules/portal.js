@@ -14,5 +14,11 @@ registerPage('mipanel','Mi panel',['ESTUDIANTE'],async()=>{
     (p.requisitos.length?`<div class="scroll"><table><thead><tr><th>REQUISITO</th><th>PLAZO</th><th>ESTADO</th></tr></thead><tbody>${p.requisitos.map(r=>`<tr><td>${e(r.nombre)}</td><td>${deadlineText(r)}</td><td>${typeof statusPill==='function'?statusPill(r.estado):e(r.estado)}</td></tr>`).join('')}</tbody></table></div>`:empty('Sin requisitos definidos','La coordinación aún no configura los requisitos de esta práctica.'))+
     button('Ver detalle y entregar documentos',`data-detail="${p.id}"`))).join(''):card('Mis prácticas',empty('Todavía no tienes prácticas registradas','La coordinación debe registrar tu práctica.'));
   const plazos=data.plazos.length?`<div class="scroll"><table><thead><tr><th>REQUISITO</th><th>ASIGNATURA</th><th>PLAZO</th></tr></thead><tbody>${data.plazos.map(r=>`<tr><td>${e(r.nombre)}</td><td>${e(r.asignatura)}</td><td>${deadlineText(r)}</td></tr>`).join('')}</tbody></table></div>`:empty('No tienes plazos pendientes','Revisa igualmente los requisitos sin fecha límite.');
-  return heading(`Hola, ${s.nombres}`,'Aquí ves solo tus prácticas, tus documentos y tus plazos.')+card('Próximos plazos y atrasos',plazos)+practicas;
+  // Resumen de todos sus requisitos, para saber de un vistazo qué le falta.
+  const todos=data.practicas.flatMap(p=>p.requisitos);
+  const cuenta=estado=>todos.filter(r=>r.estado===estado).length;
+  const vencidos=todos.filter(r=>r.vencido).length;
+  const resumen=`<div class="stats">${statTile('clipboard',cuenta('PENDIENTE'),'Por entregar')}${statTile('edit',cuenta('OBSERVADO'),'Correcciones solicitadas')}${statTile('inbox',cuenta('EN_REVISION'),'En revisión')}${statTile('check',cuenta('APROBADO'),'Aprobados')}</div>`;
+  const aviso=vencidos?`<section class="attention-card"><div class="attention-head">${icon('alert',20)}<h2>Tienes ${vencidos} ${vencidos===1?'requisito fuera de plazo':'requisitos fuera de plazo'}</h2></div><p class="attention-note">Entrégalos lo antes posible o conversa con tu profesor.</p></section>`:'';
+  return heading(`Hola, ${s.nombres}`,'Aquí ves solo tus prácticas, tus documentos y tus plazos.')+aviso+resumen+card('Próximos plazos y atrasos',plazos)+practicas;
 });

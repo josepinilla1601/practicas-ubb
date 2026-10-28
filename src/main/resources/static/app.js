@@ -47,6 +47,36 @@ function onForm(selector, handler) {
   });
 }
 function registerPage(key,label,roles,render,bind=()=>{}) { pages[key]={label,roles,render,bind}; }
+// Íconos de línea propios (sin librerías externas). Heredan el color del texto.
+const iconPaths={
+  home:'<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+  chart:'<path d="M4 20V11M10 20V5M16 20v-6M2 20h20"/>',
+  clipboard:'<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9zM9 11h6M9 15h4"/>',
+  users:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2A6 6 0 0 1 21.5 20"/>',
+  school:'<path d="M3 21h18M5 21V10l7-5 7 5v11M10 21v-5h4v5"/>',
+  calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  book:'<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/>',
+  chat:'<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/>',
+  shield:'<path d="M12 3 4 6v6c0 4.5 3.4 8 8 9 4.6-1 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/>',
+  mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+  lock:'<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+  eye:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  chevron:'<path d="m6 9 6 6 6-6"/>',
+  alert:'<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/>',
+  check:'<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>',
+  inbox:'<path d="M3 13h5l2 3h4l2-3h5"/><path d="M5 5h14l2 8v6H3v-6z"/>',
+  edit:'<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  send:'<path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/>',
+  close:'<path d="M6 6l12 12M18 6 6 18"/>',
+  arrow:'<path d="M5 12h14M13 6l6 6-6 6"/>',
+};
+const icon=(name,size=18)=>`<svg class="icon" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[name]||''}</svg>`;
+const statTile=(iconName,value,label)=>`<div class="stat">${icon(iconName,20)}<div class="number">${value||0}</div><div class="label">${e(label)}</div></div>`;
+const pageIcons={mipanel:'home',resumen:'home',indicadores:'chart',practicas:'clipboard',estudiantes:'users',centros:'school',plantillas:'calendar',materiales:'book',asistente:'chat',usuarios:'shield'};
+// Se ejecutan al iniciar o cerrar sesión y en cada cambio de página (por ejemplo, el asistente flotante).
+const sessionHooks=[];
+const runSessionHooks=()=>sessionHooks.forEach(hook=>{try{hook();}catch(err){console.error(err);}});
 // Secciones del menú lateral. Las páginas de la cuenta personal van en el menú de perfil, no aquí.
 const navGroups=[
   ['Inicio',['mipanel','resumen','indicadores']],
@@ -54,6 +84,14 @@ const navGroups=[
   ['Apoyo docente',['materiales','asistente']],
   ['Administración',['usuarios']],
 ];
+// Grupos plegados por el usuario. Es una preferencia de este navegador: si no se puede guardar, se ignora.
+let collapsedGroups=new Set();
+try { collapsedGroups=new Set(JSON.parse(localStorage.getItem('navPlegados')||'[]')); } catch { collapsedGroups=new Set(); }
+function toggleGroup(title) {
+  collapsedGroups.has(title)?collapsedGroups.delete(title):collapsedGroups.add(title);
+  try { localStorage.setItem('navPlegados',JSON.stringify([...collapsedGroups])); } catch { /* sin almacenamiento disponible */ }
+  renderNav();
+}
 const accountPages=['cuenta'];
 const roleLabels={COORDINADOR:'Coordinación',PROFESOR_UBB:'Profesor UBB',PROFESOR_COLEGIO:'Profesor de colegio',ESTUDIANTE:'Estudiante'};
 // Iniciales para el avatar, sin contar palabras cortas como "de" o "la".
@@ -71,10 +109,14 @@ function renderNav() {
   $('nav').innerHTML=groups.map(([title,keys])=>{
     const items=keys.filter(visibleInNav);
     if(!items.length)return '';
-    return `<div class="nav-group"><div class="nav-label">${e(title)}</div>${items.map(key=>`<button data-page="${key}" class="${key===state.page?'active':''}" ${key===state.page?'aria-current="page"':''}>${e(pages[key].label)}</button>`).join('')}</div>`;
+    // El grupo de la página abierta siempre queda desplegado.
+    const open=!collapsedGroups.has(title) || items.includes(state.page);
+    const links=items.map(key=>`<button data-page="${key}" class="nav-link ${key===state.page?'active':''}" ${key===state.page?'aria-current="page"':''}>${icon(pageIcons[key]||'clipboard')}<span>${e(pages[key].label)}</span></button>`).join('');
+    return `<div class="nav-group ${open?'':'collapsed'}"><button type="button" class="nav-label" data-group="${e(title)}" aria-expanded="${open}">${e(title)}${icon('chevron',14)}</button><div class="nav-items">${links}</div></div>`;
   }).join('');
   const u=state.usuario;
   $('#profile').hidden=!u;
+  runSessionHooks();
   if(!u){closeProfileMenu();return;}
   $('#avatar').textContent=initials(u.nombre);
   $('#identity').textContent=u.nombre;
@@ -109,10 +151,30 @@ async function go(page,id) {
 }
 async function saved(page,id) { await load();await go(page,id);notice('Información guardada correctamente.'); }
 function renderLogin() {
-  navigation++;document.body.classList.add('signed-out');$('nav').innerHTML='';$('#profile').hidden=true;closeProfileMenu();
-  $('#app').innerHTML=heading('Bienvenido a Prácticas UBB','Ingresa con la cuenta asignada por la coordinación.')+
-    card('Iniciar sesión',`<form id="login-form">${field('Correo','username','email')}${field('Contraseña','password','password',true,60)}${button('Ingresar','type="submit"')}<p class="hint">Si todavía no tienes cuenta, solicítala al coordinador.</p></form>`);
+  navigation++;document.body.classList.add('signed-out');$('nav').innerHTML='';$('#profile').hidden=true;closeProfileMenu();runSessionHooks();
+  const features=[['clipboard','Requisitos, plazos y entregas de cada práctica'],['check','Revisión de entregas con historial de versiones'],['chat','Asistente con el material de tus profesores']];
+  $('#app').innerHTML=`<div class="login-shell">
+    <section class="login-brand">
+      <div class="login-logo" aria-hidden="true">P</div>
+      <h1>Prácticas <span>UBB</span></h1>
+      <p class="login-sub">Pedagogía en Educación Matemática</p>
+      <span class="login-rule" aria-hidden="true"></span>
+      <ul class="login-features">${features.map(([i,t])=>`<li>${icon(i,20)}<span>${e(t)}</span></li>`).join('')}</ul>
+      <p class="login-foot">Plataforma de seguimiento de la formación práctica · Universidad del Bío-Bío</p>
+    </section>
+    <section class="login-panel">
+      <h2>Iniciar sesión</h2>
+      <p class="login-lead">Ingresa con la cuenta asignada por la coordinación.</p>
+      <form id="login-form" novalidate>
+        <label class="field">Correo<span class="input-icon">${icon('mail')}<input name="username" type="email" required maxlength="150" autocomplete="username" placeholder="nombre@correo.cl"></span></label>
+        <label class="field">Contraseña<span class="input-icon">${icon('lock')}<input name="password" type="password" required maxlength="60" autocomplete="current-password"><button type="button" class="toggle-pass" data-toggle-pass aria-label="Mostrar contraseña" aria-pressed="false">${icon('eye')}</button></span></label>
+        <button class="button login-submit" type="submit">Entrar al sistema</button>
+      </form>
+      <p class="login-help">¿No tienes cuenta o no recuerdas tu contraseña? Solicítalo a la coordinación de prácticas.</p>
+    </section>
+  </div>`;
   onForm('#login-form',async form=>{
+    if(!form.elements.username.value.trim() || !form.elements.password.value)throw new Error('Ingresa tu correo y tu contraseña.');
     await api('/login',{method:'POST',body:new URLSearchParams(new FormData(form))});
     await refreshSession();document.body.classList.remove('signed-out');$('#notice').hidden=true;await load();await go(homePage());
   });
@@ -179,6 +241,11 @@ document.addEventListener('click',async event=>{
   if(!event.target.closest('#profile'))closeProfileMenu();
   const target=event.target.closest('button');if(!target)return;
   if(target.id==='profile-button'){toggleProfileMenu();return;}
+  if(target.dataset.group){toggleGroup(target.dataset.group);return;}
+  if(target.hasAttribute('data-toggle-pass')){
+    const input=target.parentElement.querySelector('input');const show=input.type==='password';
+    input.type=show?'text':'password';target.setAttribute('aria-pressed',String(show));target.setAttribute('aria-label',show?'Ocultar contraseña':'Mostrar contraseña');return;
+  }
   if(target.closest('#profile-menu'))closeProfileMenu();
   try {
     if(target.dataset.page){$('#notice').hidden=true;await go(target.dataset.page);}
