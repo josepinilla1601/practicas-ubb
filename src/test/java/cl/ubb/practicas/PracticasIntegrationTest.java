@@ -187,6 +187,37 @@ class PracticasIntegrationTest {
    cuenta("revisor@test.example","PROFESOR_UBB",null);
    mvc.perform(post("/api/documentos/"+d+"/revision").with(user("revisor@test.example").roles("PROFESOR_UBB")).contentType("application/json").content("{\"decision\":\"APROBADO\"}")).andExpect(status().isNotFound());
   }
+  @Test void s215IndicadoresDistinguenEstadosYAtrasos()throws Exception{
+   long p=practica("IND-1","INT1",2026);
+   long sinConfig=practica("IND-2","INI1",2031);
+   var reqs=db.queryForList("SELECT id FROM requisitos_practica WHERE practica_id=? ORDER BY id",Long.class,p);
+   assertEquals(2,reqs.size());
+   long d1=subir(p,reqs.get(0),"a.pdf",pdf(),201).get("id").asLong();
+   revisar(d1,"APROBADO","",201);
+   db.update("UPDATE requisitos_practica SET fecha_limite='2020-01-01' WHERE id=?",reqs.get(1));
+   var data=json.readTree(mvc.perform(get("/api/indicadores")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+   var t=data.get("totales");
+   assertEquals(2,t.get("practicas").asInt());
+   assertEquals(1,t.get("aprobado").asInt());
+   assertEquals(1,t.get("pendiente").asInt());
+   assertEquals(1,t.get("vencidos").asInt());
+   assertEquals(1,t.get("sin_configurar").asInt());
+   assertEquals(0,t.get("completas").asInt());
+   for(var fila:data.get("practicas")){
+    if(fila.get("id").asLong()==p)assertEquals("CON_ATRASO",fila.get("situacion").asText());
+    if(fila.get("id").asLong()==sinConfig)assertEquals("SIN_CONFIGURAR",fila.get("situacion").asText());
+   }
+   long d2=subir(p,reqs.get(1),"b.pdf",pdf(),201).get("id").asLong();
+   var t2=json.readTree(mvc.perform(get("/api/indicadores")).andReturn().getResponse().getContentAsString()).get("totales");
+   assertEquals(1,t2.get("en_revision").asInt());assertEquals(0,t2.get("vencidos").asInt());
+   revisar(d2,"OBSERVADO","Corregir formato",201);
+   var t3=json.readTree(mvc.perform(get("/api/indicadores")).andReturn().getResponse().getContentAsString()).get("totales");
+   assertEquals(1,t3.get("observado").asInt());assertEquals(1,t3.get("vencidos").asInt());
+   cuenta("sinpracticas@test.example","PROFESOR_UBB",null);
+   mvc.perform(get("/api/indicadores").with(user("sinpracticas@test.example").roles("PROFESOR_UBB"))).andExpect(jsonPath("$.totales.practicas").value(0));
+   cuenta("est-ind@test.example","ESTUDIANTE",db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,p));
+   mvc.perform(get("/api/indicadores").with(user("est-ind@test.example").roles("ESTUDIANTE"))).andExpect(status().isForbidden());
+  }
   @Test void s214EvaluacionColegioSoloPracticantesAsignados()throws Exception{
    long p=practica("EVAL-1","INT1",2026),otra=practica("EVAL-2","INT1",2026);
    long ubb=cuenta("ubb@test.example","PROFESOR_UBB",null),colegio=cuenta("colegio@test.example","PROFESOR_COLEGIO",null);
