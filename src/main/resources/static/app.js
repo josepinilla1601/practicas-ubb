@@ -9,6 +9,7 @@ const detailSections = [];
 const detailBindings = [];
 const role = (...roles) => !!state.usuario && roles.includes(state.usuario.rol);
 const coord = () => role('COORDINADOR');
+let homePage = () => 'resumen';
 
 async function api(path, options={}) {
   const headers = {...options.headers};
@@ -75,7 +76,7 @@ function renderLogin() {
     card('Iniciar sesión',`<form id="login-form">${field('Correo','username','email')}${field('Contraseña','password','password',true,60)}${button('Ingresar','type="submit"')}<p class="hint">Si todavía no tienes cuenta, solicítala al coordinador.</p></form>`);
   onForm('#login-form',async form=>{
     await api('/login',{method:'POST',body:new URLSearchParams(new FormData(form))});
-    await refreshSession();document.body.classList.remove('signed-out');$('#notice').hidden=true;await load();await go('resumen');
+    await refreshSession();document.body.classList.remove('signed-out');$('#notice').hidden=true;await load();await go(homePage());
   });
 }
 function progress(p) {
@@ -143,6 +144,6 @@ document.addEventListener('click',async event=>{
   } catch(err) {notice(err.message,true);} finally {target.disabled=false;}
 });
 document.addEventListener('DOMContentLoaded',async()=>{
-  try {await refreshSession();if(!state.usuario){renderLogin();return;}await load();await go('resumen');}
+  try {await refreshSession();if(!state.usuario){renderLogin();return;}await load();await go(homePage());}
   catch(err){$('#app').innerHTML=empty('No se pudo iniciar','Comprueba la conexión con el servidor y MySQL.');notice(err.message,true);}
 });

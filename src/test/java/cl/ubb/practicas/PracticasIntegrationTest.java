@@ -141,6 +141,21 @@ class PracticasIntegrationTest {
    assertTrue(seguimiento(p).get("requisitos").get(0).get("vencido").asBoolean());
    db.update("DELETE FROM requisitos_plantilla WHERE id=?",plantilla);
   }
+  @Test void s204PanelEstudianteSoloMuestraLoPropio()throws Exception{
+   long propia=practica("PORTAL-1","INI1",2026),ajena=practica("PORTAL-2","INI1",2026);
+   long estudiante=db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,propia);
+   cuenta("portal@test.example","ESTUDIANTE",estudiante);
+   db.update("UPDATE requisitos_practica SET fecha_limite='2020-01-01' WHERE practica_id=?",propia);
+   var alumno=user("portal@test.example").roles("ESTUDIANTE");
+   var panel=json.readTree(mvc.perform(get("/api/mi-panel").with(alumno)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+   assertEquals(1,panel.get("practicas").size());
+   assertEquals(propia,panel.get("practicas").get(0).get("id").asLong());
+   assertTrue(panel.get("plazos").get(0).get("vencido").asBoolean());
+   mvc.perform(get("/api/practicas/"+ajena+"/seguimiento").with(alumno)).andExpect(status().isNotFound());
+   mvc.perform(multipart("/api/practicas/"+ajena+"/requisitos/"+requisito(ajena)+"/documentos").file(new MockMultipartFile("archivo","x.pdf","application/pdf",pdf())).with(alumno)).andExpect(status().isNotFound());
+   mvc.perform(multipart("/api/practicas/"+propia+"/requisitos/"+requisito(propia)+"/documentos").file(new MockMultipartFile("archivo","x.pdf","application/pdf",pdf())).with(alumno)).andExpect(status().isCreated());
+   mvc.perform(get("/api/mi-panel")).andExpect(status().isForbidden());
+  }
   @Test void s202AsignacionesPermisosYDesactivacion()throws Exception{
    long p=practica("PERM-1","INI1",2026);
    long estudiante=db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,p);
