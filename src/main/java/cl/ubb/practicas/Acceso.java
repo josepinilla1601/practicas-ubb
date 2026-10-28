@@ -23,4 +23,20 @@ public class Acceso {
     public void exigir(String... roles) {
         if(!Arrays.asList(roles).contains(rol()))throw new Problema(HttpStatus.FORBIDDEN,"No tienes permiso para esta operación.");
     }
+    public record Filtro(String sql,Object[] args) { }
+    public Filtro filtroPracticas() {
+        var u=actual();
+        return switch(u.get("rol").toString()) {
+            case "COORDINADOR" -> new Filtro("1=1",new Object[]{});
+            case "PROFESOR_UBB" -> new Filtro("p.profesor_ubb_id=?",new Object[]{u.get("id")});
+            case "PROFESOR_COLEGIO" -> new Filtro("p.profesor_colegio_id=?",new Object[]{u.get("id")});
+            case "ESTUDIANTE" -> new Filtro("p.estudiante_id=?",new Object[]{u.get("estudiante_id")});
+            default -> new Filtro("1=0",new Object[]{});
+        };
+    }
+    public void practica(long id) {
+        var f=filtroPracticas();var args=new ArrayList<>(Arrays.asList(f.args()));args.add(id);
+        if(db.queryForObject("SELECT COUNT(*) FROM practicas p WHERE "+f.sql()+" AND p.id=?",Long.class,args.toArray())==0)
+            throw Problema.noExiste("La práctica no existe o no está asignada a tu cuenta.");
+    }
 }

@@ -31,7 +31,7 @@ public class SeguridadConfig {
         http.authorizeHttpRequests(a -> a
             .requestMatchers("/", "/index.html", "/styles.css", "/app.js", "/modules/**", "/favicon.ico", "/api/sesion", "/error").permitAll()
             .requestMatchers("/api/cuenta/**").authenticated()
-            .requestMatchers("/api/**").hasRole("COORDINADOR")
+            .requestMatchers("/api/**").authenticated()
             .anyRequest().denyAll());
         http.formLogin(f -> f.loginProcessingUrl("/api/login").permitAll()
             .successHandler((req,res,auth) -> json(res,200,"Sesión iniciada."))

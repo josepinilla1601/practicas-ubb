@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.security.test.context.support.WithAnonymousUser;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -111,5 +112,22 @@ class PracticasIntegrationTest {
   }
   @Test void s201RechazaCsrfInvalido()throws Exception{
    mvc.perform(post("/api/estudiantes").with(csrf().useInvalidToken()).contentType("application/json").content("{}")).andExpect(status().isForbidden());
+  }
+  long cuenta(String correo,String rol,Long estudiante)throws Exception{
+   var d=new java.util.HashMap<String,Object>();d.put("correo",correo);d.put("nombre","Persona de prueba");d.put("clave","ClavePrueba2026");d.put("rol",rol);d.put("estudianteId",estudiante);
+   return crear("/usuarios",d,201).get("id").asLong();
+  }
+  @Test void s202AsignacionesPermisosYDesactivacion()throws Exception{
+   long p=practica("PERM-1","INI1",2026);
+   long estudiante=db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,p);
+   long alumno=cuenta("alumno@test.example","ESTUDIANTE",estudiante);
+   long profesor=cuenta("profesor@test.example","PROFESOR_UBB",null);
+   mvc.perform(get("/api/practicas/"+p).with(user("profesor@test.example").roles("PROFESOR_UBB"))).andExpect(status().isNotFound());
+   mvc.perform(put("/api/practicas/"+p+"/docentes").contentType("application/json").content("{\"profesorUbbId\":"+profesor+"}")).andExpect(status().isOk());
+   mvc.perform(get("/api/practicas").with(user("profesor@test.example").roles("PROFESOR_UBB"))).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1));
+   mvc.perform(get("/api/usuarios").with(user("alumno@test.example").roles("ESTUDIANTE"))).andExpect(status().isForbidden());
+   mvc.perform(patch("/api/usuarios/"+alumno+"/activo").contentType("application/json").content("{\"activo\":false}")).andExpect(status().isOk());
+   mvc.perform(get("/api/practicas").with(user("alumno@test.example").roles("ESTUDIANTE"))).andExpect(status().isUnauthorized());
+   assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM practicas WHERE id=?",Integer.class,p));
   }
 }
