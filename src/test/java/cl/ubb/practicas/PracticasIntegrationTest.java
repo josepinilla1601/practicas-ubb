@@ -38,7 +38,7 @@ class PracticasIntegrationTest {
   @Autowired PasswordEncoder encoder;
  @BeforeEach void limpiarSoloBaseTest(){
   assertTrue(db.queryForObject("SELECT DATABASE()",String.class).endsWith("_test"),"Las pruebas necesitan una base exclusiva terminada en _test.");
-   for(String tabla:new String[]{"material_fragmentos","materiales","evaluaciones_colegio","revisiones","documentos","requisitos_practica","practicas","usuarios","estudiantes","centros"})db.update("DELETE FROM "+tabla);
+   for(String tabla:new String[]{"asistente_mensajes","material_fragmentos","materiales","evaluaciones_colegio","revisiones","documentos","requisitos_practica","practicas","usuarios","estudiantes","centros"})db.update("DELETE FROM "+tabla);
    db.update("INSERT INTO usuarios(correo,nombre,clave_hash,rol) VALUES('coordinacion@test.example','Pruebas','no-utilizada','COORDINADOR')");
    mvc=MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).defaultRequest(get("/").with(csrf())).build();
  }
@@ -255,6 +255,59 @@ class PracticasIntegrationTest {
    cuenta("lector@test.example","ESTUDIANTE",db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,p));
    mvc.perform(get("/api/materiales").with(user("lector@test.example").roles("ESTUDIANTE"))).andExpect(status().isForbidden());
    assertEquals(2,db.queryForObject("SELECT COUNT(*) FROM materiales",Integer.class));
+  }
+  JsonNode preguntar(org.springframework.test.web.servlet.request.RequestPostProcessor quien,String pregunta)throws Exception{
+   return json.readTree(mvc.perform(post("/api/asistente").with(quien).contentType("application/json").content(json.writeValueAsBytes(Map.of("pregunta",pregunta))))
+    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+  }
+  void publicar(long material)throws Exception{
+   mvc.perform(patch("/api/materiales/"+material+"/estado").contentType("application/json").content("{\"estado\":\"PUBLICADO\"}")).andExpect(status().isOk());
+  }
+  @Test void s218AsistenteRespondeConFuentesYSoloMaterialPermitido()throws Exception{
+   long reglamento=cargarMaterial("Reglamento de práctica","reglamento.md",("La asistencia mínima al centro de práctica es del 90 por ciento.\n\n"+
+    "Las inasistencias se justifican con el profesor guía dentro de 48 horas.").getBytes(StandardCharsets.UTF_8),"INI1",2026,201).get("id").asLong();
+   long ajeno=cargarMaterial("Pauta avanzada","pauta.md","El portafolio docente incluye planificaciones y reflexiones semanales.".getBytes(StandardCharsets.UTF_8),"PRO",2026,201).get("id").asLong();
+   long borrador=cargarMaterial("Borrador","borrador.md","La rúbrica secreta todavía no está aprobada por el comité.".getBytes(StandardCharsets.UTF_8),"INI1",2026,201).get("id").asLong();
+   publicar(reglamento);publicar(ajeno);
+   long p=practica("BOT-1","INI1",2026);
+   cuenta("bot@test.example","ESTUDIANTE",db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,p));
+   var alumno=user("bot@test.example").roles("ESTUDIANTE");
+   var r=preguntar(alumno,"¿Cuál es la asistencia mínima en el centro de práctica?");
+   assertEquals("MATERIAL",r.get("tipo").asText());
+   assertTrue(r.get("respuesta").asText().contains("90 por ciento"));
+   assertEquals("Reglamento de práctica",r.get("fuentes").get(0).get("titulo").asText());
+   assertEquals("SIN_RESPALDO",preguntar(alumno,"¿Qué incluye el portafolio docente?").get("tipo").asText());
+   assertEquals("SIN_RESPALDO",preguntar(alumno,"¿Qué dice la rúbrica secreta del comité?").get("tipo").asText());
+   assertEquals("SIN_RESPALDO",preguntar(alumno,"¿Quién ganó el campeonato de fútbol?").get("tipo").asText());
+   mvc.perform(patch("/api/materiales/"+reglamento+"/estado").contentType("application/json").content("{\"estado\":\"RETIRADO\"}")).andExpect(status().isOk());
+   assertEquals("SIN_RESPALDO",preguntar(alumno,"¿Cuál es la asistencia mínima en el centro de práctica?").get("tipo").asText());
+   assertEquals("MATERIAL",preguntar(user("coordinacion@test.example").roles("COORDINADOR"),"¿Qué incluye el portafolio docente?").get("tipo").asText());
+   assertTrue(borrador>0);
+  }
+  @Test void s219s220PlazosPersonalesEHistorialPrivado()throws Exception{
+   long p=practica("BOT-2","INT1",2026),otra=practica("BOT-3","INT1",2026);
+   var reqs=db.queryForList("SELECT id FROM requisitos_practica WHERE practica_id=? ORDER BY id",Long.class,p);
+   db.update("UPDATE requisitos_practica SET fecha_limite='2020-01-01' WHERE id=?",reqs.get(0));
+   db.update("UPDATE requisitos_practica SET nombre='Requisito de otro estudiante' WHERE practica_id=?",otra);
+   long d=subir(p,reqs.get(1),"informe.pdf",pdf(),201).get("id").asLong();
+   revisar(d,"OBSERVADO","Agregar conclusiones",201);
+   cuenta("plazos@test.example","ESTUDIANTE",db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,p));
+   cuenta("vecino@test.example","ESTUDIANTE",db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,otra));
+   var alumno=user("plazos@test.example").roles("ESTUDIANTE");
+   var r=preguntar(alumno,"¿Qué tengo pendiente?");
+   assertEquals("PLAZOS",r.get("tipo").asText());
+   String texto=r.get("respuesta").asText();
+   assertTrue(texto.contains("2 requisitos pendientes"),texto);
+   assertTrue(texto.contains("FUERA DE PLAZO"),texto);
+   assertTrue(texto.contains("versión corregida"),texto);
+   assertFalse(texto.contains("otro estudiante"),texto);
+   assertEquals("PLAZOS",preguntar(alumno,"cuales son mis plazos").get("tipo").asText());
+   var historial=json.readTree(mvc.perform(get("/api/asistente/historial").with(alumno)).andReturn().getResponse().getContentAsString());
+   assertEquals(2,historial.size());
+   assertEquals("¿Qué tengo pendiente?",historial.get(0).get("pregunta").asText());
+   assertEquals("SEGUIMIENTO",historial.get(0).get("fuentes").get(0).get("tipo").asText());
+   mvc.perform(get("/api/asistente/historial").with(user("vecino@test.example").roles("ESTUDIANTE"))).andExpect(jsonPath("$.length()").value(0));
+   mvc.perform(post("/api/asistente").with(alumno).contentType("application/json").content("{\"pregunta\":\"\"}")).andExpect(status().isBadRequest());
   }
   @Test void s214EvaluacionColegioSoloPracticantesAsignados()throws Exception{
    long p=practica("EVAL-1","INT1",2026),otra=practica("EVAL-2","INT1",2026);

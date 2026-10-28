@@ -21,3 +21,5 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .document-text { white-space:pre-wrap; max-height:350px; overflow:auto; font-size:13px; }
 .table-actions { display:flex; gap:6px; flex-wrap:wrap; }
 @media(max-width:900px) { .chat-layout { grid-template-columns:1fr; } header { height:auto; min-height:76px; flex-wrap:wrap; gap:12px; padding:15px; } }
+#chat-messages { max-height:520px; overflow:auto; }
+.message .pill { margin-bottom:6px; }
