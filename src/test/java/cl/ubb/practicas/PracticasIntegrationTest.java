@@ -38,7 +38,7 @@ class PracticasIntegrationTest {
   @Autowired PasswordEncoder encoder;
  @BeforeEach void limpiarSoloBaseTest(){
   assertTrue(db.queryForObject("SELECT DATABASE()",String.class).endsWith("_test"),"Las pruebas necesitan una base exclusiva terminada en _test.");
-   for(String tabla:new String[]{"evaluaciones_colegio","revisiones","documentos","requisitos_practica","practicas","usuarios","estudiantes","centros"})db.update("DELETE FROM "+tabla);
+   for(String tabla:new String[]{"material_fragmentos","materiales","evaluaciones_colegio","revisiones","documentos","requisitos_practica","practicas","usuarios","estudiantes","centros"})db.update("DELETE FROM "+tabla);
    db.update("INSERT INTO usuarios(correo,nombre,clave_hash,rol) VALUES('coordinacion@test.example','Pruebas','no-utilizada','COORDINADOR')");
    mvc=MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).defaultRequest(get("/").with(csrf())).build();
  }
@@ -217,6 +217,44 @@ class PracticasIntegrationTest {
    mvc.perform(get("/api/indicadores").with(user("sinpracticas@test.example").roles("PROFESOR_UBB"))).andExpect(jsonPath("$.totales.practicas").value(0));
    cuenta("est-ind@test.example","ESTUDIANTE",db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,p));
    mvc.perform(get("/api/indicadores").with(user("est-ind@test.example").roles("ESTUDIANTE"))).andExpect(status().isForbidden());
+  }
+  static byte[] pdfConTexto(String... lineas)throws Exception{
+   try(var doc=new org.apache.pdfbox.pdmodel.PDDocument();var out=new java.io.ByteArrayOutputStream()){
+    var pagina=new org.apache.pdfbox.pdmodel.PDPage();doc.addPage(pagina);
+    try(var cs=new org.apache.pdfbox.pdmodel.PDPageContentStream(doc,pagina)){
+     cs.beginText();cs.setFont(new org.apache.pdfbox.pdmodel.font.PDType1Font(org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.HELVETICA),11);cs.newLineAtOffset(50,700);
+     for(String l:lineas){cs.showText(l);cs.newLineAtOffset(0,-16);}
+     cs.endText();
+    }
+    doc.save(out);return out.toByteArray();
+   }
+  }
+  JsonNode cargarMaterial(String titulo,String nombre,byte[] bytes,String asignatura,int anio,int status)throws Exception{
+   return json.readTree(mvc.perform(multipart("/api/materiales").file(new MockMultipartFile("archivo",nombre,"application/octet-stream",bytes))
+    .param("titulo",titulo).param("asignaturaId",String.valueOf(asignatura(asignatura))).param("anio",String.valueOf(anio)).param("semestre","2"))
+    .andExpect(status().is(status)).andReturn().getResponse().getContentAsString());
+  }
+  @Test void s216CargaProcesaPublicaYRetiraMaterial()throws Exception{
+   byte[] pdf=pdfConTexto("Reglamento de practica pedagogica.","La asistencia minima al centro de practica es del 90 por ciento.","Las inasistencias se justifican con el profesor guia.");
+   var r=cargarMaterial("Reglamento","reglamento.pdf",pdf,"INI1",2026,201);
+   long id=r.get("id").asLong();assertTrue(r.get("fragmentos").asInt()>=1);
+   var detalle=json.readTree(mvc.perform(get("/api/materiales/"+id)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+   assertEquals("BORRADOR",detalle.get("estado").asText());
+   assertTrue(detalle.get("vista_previa").asText().contains("asistencia minima"));
+   mvc.perform(patch("/api/materiales/"+id+"/estado").contentType("application/json").content("{\"estado\":\"PUBLICADO\"}")).andExpect(status().isOk());
+   mvc.perform(get("/api/materiales").param("asignaturaId",String.valueOf(asignatura("INI1")))).andExpect(jsonPath("$[0].estado").value("PUBLICADO"));
+   mvc.perform(patch("/api/materiales/"+id+"/estado").contentType("application/json").content("{\"estado\":\"RETIRADO\"}")).andExpect(status().isOk());
+   mvc.perform(patch("/api/materiales/"+id+"/estado").contentType("application/json").content("{\"estado\":\"BORRADO\"}")).andExpect(status().isBadRequest());
+   mvc.perform(get("/api/materiales/"+id+"/descarga")).andExpect(status().isOk()).andExpect(content().bytes(pdf));
+   cargarMaterial("Dañado","falso.pdf",pdf(),"INI1",2026,400);
+   cargarMaterial("Vacío","vacio.txt","   \n ".getBytes(StandardCharsets.UTF_8),"INI1",2026,400);
+   cargarMaterial("Ejecutable","programa.exe",pdf,"INI1",2026,400);
+   var txt=cargarMaterial("Guía","guia.md","# Guía\n\nEl informe final se entrega en formato PDF con portada institucional.".getBytes(StandardCharsets.UTF_8),"INI1",2026,201);
+   assertEquals(1,txt.get("fragmentos").asInt());
+   long p=practica("MAT-1","INI1",2026);
+   cuenta("lector@test.example","ESTUDIANTE",db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,p));
+   mvc.perform(get("/api/materiales").with(user("lector@test.example").roles("ESTUDIANTE"))).andExpect(status().isForbidden());
+   assertEquals(2,db.queryForObject("SELECT COUNT(*) FROM materiales",Integer.class));
   }
   @Test void s214EvaluacionColegioSoloPracticantesAsignados()throws Exception{
    long p=practica("EVAL-1","INT1",2026),otra=practica("EVAL-2","INT1",2026);
