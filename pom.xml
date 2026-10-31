@@ -14,7 +14,7 @@
     <dependency><groupId>org.flywaydb</groupId><artifactId>flyway-core</artifactId></dependency>
     <dependency><groupId>org.flywaydb</groupId><artifactId>flyway-mysql</artifactId></dependency>
     <!-- S2-16: extraccion de texto de PDF para el material de consulta. -->
-    <dependency><groupId>org.apache.pdfbox</groupId><artifactId>pdfbox</artifactId><version>3.0.5</version></dependency>
+    <dependency><groupId>org.apache.pdfbox</groupId><artifactId>pdfbox</artifactId><version>3.0.8</version></dependency>
     <dependency><groupId>com.mysql</groupId><artifactId>mysql-connector-j</artifactId><scope>runtime</scope></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope>
       <!-- Las pruebas usan el backend y MySQL reales; no necesitan dobles Mockito. -->
