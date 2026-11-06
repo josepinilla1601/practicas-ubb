@@ -19,11 +19,14 @@ EOF
 SPRING_PROFILES_ACTIVE=prod
 APP_ADDRESS=0.0.0.0
 APP_PORT=8019
-# El proxy de Pacheco quita "/bestpem" antes de llegar al puerto 8019: la app corre en la raíz,
-# pero la cookie de sesión se limita a /bestpem para no chocar con otras apps del mismo dominio.
+# El proxy de Pacheco quita "/bestpem" antes de llegar al puerto 8019: la app corre en la raíz.
+# Además, el Apache del proxy reescribe toda ruta de cookie que empiece con "/" a "/bestcpem/" (con "c"),
+# y el navegador nunca la devolvería. Una ruta sin "/" inicial no se reescribe y el navegador usa
+# la ruta de la petición (/bestpem/api), donde están todas las llamadas con sesión.
+# Si la universidad corrige el proxy, cambiar a SESSION_COOKIE_PATH=/bestpem.
 APP_CONTEXT_PATH=
 SESSION_COOKIE_NAME=BESTPEM_SESSION
-SESSION_COOKIE_PATH=/bestpem
+SESSION_COOKIE_PATH=bestpem
 DB_URL=jdbc:mysql://127.0.0.1:3306/practicas_ubb?serverTimezone=UTC&allowPublicKeyRetrieval=true&sslMode=DISABLED
 DB_USER=practicas_app
 DB_PASSWORD=$clave_app
