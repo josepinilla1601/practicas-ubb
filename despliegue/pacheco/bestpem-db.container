@@ -1,0 +1,18 @@
+# Base de datos MySQL. Sus datos viven en el volumen "bestpem-mysql" y no se pierden al reiniciar.
+[Unit]
+Description=MySQL de Prácticas UBB
+
+[Container]
+ContainerName=bestpem-db
+Image=docker.io/library/mysql:8.4
+Pod=bestpem.pod
+Volume=bestpem-mysql:/var/lib/mysql
+EnvironmentFile=%h/bestpem/db.env
+Environment=TZ=America/Santiago
+
+[Service]
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

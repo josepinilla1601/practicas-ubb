@@ -15,7 +15,7 @@ async function api(path, options={}) {
   const headers = {...options.headers};
   if(options.body && !(options.body instanceof FormData) && !(options.body instanceof URLSearchParams)) headers['Content-Type']='application/json';
   if(options.method && !['GET','HEAD'].includes(options.method)) headers[state.csrfHeader]=state.csrf;
-  const response = await fetch('/api'+path, {...options, headers});
+  const response = await fetch('api'+path, {...options, headers});
   let data;
   try { data=await response.json(); } catch { data={mensaje:'El servidor no devolvió una respuesta válida.'}; }
   if(!response.ok) {
@@ -218,7 +218,7 @@ function requirementTable(data) {
   return card('Requisitos',data.configurado?`<div class="scroll"><table><thead><tr><th>REQUISITO</th><th>ESTADO</th></tr></thead><tbody>${data.requisitos.map(r=>`<tr><td>${e(r.nombre)}</td><td><span class="pill">${e(r.estado)}</span></td></tr>`).join('')}</tbody></table></div>`:empty('Sin configuración','Cero requisitos no significa práctica completa.'));
 }
 function documentsTable(data) {
-  return card('Archivos entregados',data.documentos.length?`<div class="scroll"><table><thead><tr><th>ARCHIVO</th><th>REQUISITO</th><th>FECHA</th></tr></thead><tbody>${data.documentos.map(d=>`<tr><td><a href="/api/documentos/${d.id}/descarga">${e(d.nombre_original)}</a></td><td>${e(d.requisito)}</td><td>${e(dateText(d.cargado_en))}</td></tr>`).join('')}</tbody></table></div>`:empty('Todavía no hay archivos'));
+  return card('Archivos entregados',data.documentos.length?`<div class="scroll"><table><thead><tr><th>ARCHIVO</th><th>REQUISITO</th><th>FECHA</th></tr></thead><tbody>${data.documentos.map(d=>`<tr><td><a href="api/documentos/${d.id}/descarga">${e(d.nombre_original)}</a></td><td>${e(d.requisito)}</td><td>${e(dateText(d.cargado_en))}</td></tr>`).join('')}</tbody></table></div>`:empty('Todavía no hay archivos'));
 }
 registerPage('detalle','',allRoles,async id=>{
   const data=await api(`/practicas/${id}/seguimiento`);state.detail=data;const p=data.practica;
