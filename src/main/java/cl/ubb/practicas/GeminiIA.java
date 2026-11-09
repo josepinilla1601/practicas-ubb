@@ -25,9 +25,9 @@ public class GeminiIA implements ModeloIA {
     private final ObjectMapper json;
     private final HttpClient http=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
-    public GeminiIA(@Value("${GEMINI_API_KEY:}") String clave,@Value("${GEMINI_MODEL:gemini-flash-latest}") String modelo,ObjectMapper json) {
+    public GeminiIA(@Value("${GEMINI_API_KEY:}") String clave,@Value("${GEMINI_MODEL:gemini-flash-lite-latest}") String modelo,ObjectMapper json) {
         this.clave=clave==null?"":clave.strip();
-        this.modelo=modelo==null || modelo.isBlank()?"gemini-flash-latest":modelo.strip();
+        this.modelo=modelo==null || modelo.isBlank()?"gemini-flash-lite-latest":modelo.strip();
         this.json=json;
     }
 
@@ -41,7 +41,7 @@ public class GeminiIA implements ModeloIA {
             "generationConfig",Map.of("temperature",0.3,"maxOutputTokens",4096));
         try {
             var url=URI.create("https://generativelanguage.googleapis.com/v1beta/models/"+URLEncoder.encode(modelo,StandardCharsets.UTF_8)+":generateContent");
-            var pedido=HttpRequest.newBuilder(url).timeout(Duration.ofSeconds(60))
+            var pedido=HttpRequest.newBuilder(url).timeout(Duration.ofSeconds(30))
                 .header("Content-Type","application/json").header("x-goog-api-key",clave)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(json.writeValueAsBytes(cuerpo))).build();
             var respuesta=http.send(pedido,HttpResponse.BodyHandlers.ofString());
