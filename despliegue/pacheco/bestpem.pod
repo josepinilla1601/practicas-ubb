@@ -1,0 +1,4 @@
+# Pod que agrupa MySQL y la aplicación. Solo se publica el puerto asignado (8019).
+[Pod]
+PodName=bestpem
+PublishPort=8019:8019

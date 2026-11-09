@@ -9,6 +9,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.web.filter.OncePerRequestFilter;
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
@@ -35,11 +37,18 @@ public class SeguridadConfig {
             .anyRequest().denyAll());
         http.formLogin(f -> f.loginProcessingUrl("/api/login").permitAll()
             .successHandler((req,res,auth) -> json(res,200,"Sesión iniciada."))
-            .failureHandler((req,res,ex) -> json(res,401,"Correo o contraseña incorrectos, o cuenta desactivada.")));
+            .failureHandler((req,res,ex) -> {
+                // Solo se informa que la cuenta está desactivada si la contraseña es correcta: así no se revela a terceros.
+                if(ex instanceof DisabledException && claveCorrecta(db,req.getParameter("username"),req.getParameter("password")))
+                    json(res,401,"Tu cuenta está desactivada. Pide a la coordinación de prácticas que la vuelva a activar.");
+                else json(res,401,"El correo o la contraseña no coinciden. Revisa que estén bien escritos e inténtalo de nuevo.");
+            }));
         http.logout(l -> l.logoutUrl("/api/logout")
             .logoutSuccessHandler((req,res,auth) -> json(res,200,"Sesión cerrada.")));
-        http.exceptionHandling(e -> e.authenticationEntryPoint((req,res,ex) -> json(res,401,"Inicia sesión para continuar."))
-            .accessDeniedHandler((req,res,ex) -> json(res,403,"No tienes permiso o tu sesión ha vencido. Actualiza la página.")));
+        http.exceptionHandling(e -> e.authenticationEntryPoint((req,res,ex) -> json(res,401,"Tu sesión terminó. Inicia sesión nuevamente para continuar."))
+            .accessDeniedHandler((req,res,ex) -> json(res,403,ex instanceof CsrfException
+                ?"La página estuvo abierta mucho tiempo y tu sesión expiró. Recarga la página (F5) e inténtalo de nuevo."
+                :"No tienes permiso para realizar esta acción. Si crees que es un error, contacta a la coordinación.")));
         http.requestCache(c -> c.disable());
         // Verifica la activación en cada petición, no solamente al iniciar sesión.
         http.addFilterAfter(new OncePerRequestFilter() {
@@ -57,6 +66,12 @@ public class SeguridadConfig {
             }
         }, UsernamePasswordAuthenticationFilter.class);
         return http.build();
+    }
+
+    private boolean claveCorrecta(JdbcTemplate db,String correo,String clave) {
+        if(correo==null || clave==null)return false;
+        return db.queryForList("SELECT clave_hash FROM usuarios WHERE correo=?",String.class,correo.strip().toLowerCase(Locale.ROOT))
+            .stream().anyMatch(hash -> passwordEncoder().matches(clave,hash));
     }
 
     private static void json(HttpServletResponse res,int status,String mensaje) throws IOException {

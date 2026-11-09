@@ -115,7 +115,7 @@ public class PracticasService {
              d.cargado_en,r.nombre requisito,
              ROW_NUMBER() OVER (PARTITION BY d.requisito_id ORDER BY d.id) version,
              d.id=(SELECT MAX(d2.id) FROM documentos d2 WHERE d2.requisito_id=d.requisito_id) ultima,
-             rv.decision,rv.comentario,rv.creado_en revisado_en,u.nombre revisor
+             rv.decision,rv.comentario,rv.creado_en revisado_en,u.nombre revisor,rv.revisor_id
             FROM documentos d JOIN requisitos_practica r ON r.id=d.requisito_id
             LEFT JOIN revisiones rv ON rv.documento_id=d.id LEFT JOIN usuarios u ON u.id=rv.revisor_id
             WHERE r.practica_id=? ORDER BY d.cargado_en DESC,d.id DESC

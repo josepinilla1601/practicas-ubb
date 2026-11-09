@@ -11,39 +11,155 @@ const role = (...roles) => !!state.usuario && roles.includes(state.usuario.rol);
 const coord = () => role('COORDINADOR');
 let homePage = () => 'resumen';
 
+// Barra de carga superior: se muestra mientras haya peticiones en curso (heurística 1: estado del sistema).
+let pendingRequests=0,loaderTimer=null;
+function setLoading(delta) {
+  pendingRequests=Math.max(0,pendingRequests+delta);
+  const bar=$('#loader');if(!bar)return;
+  clearTimeout(loaderTimer);
+  if(pendingRequests>0)loaderTimer=setTimeout(()=>{bar.hidden=false;document.body.setAttribute('aria-busy','true');},120);
+  else {bar.hidden=true;document.body.removeAttribute('aria-busy');}
+}
 async function api(path, options={}) {
   const headers = {...options.headers};
   if(options.body && !(options.body instanceof FormData) && !(options.body instanceof URLSearchParams)) headers['Content-Type']='application/json';
   if(options.method && !['GET','HEAD'].includes(options.method)) headers[state.csrfHeader]=state.csrf;
-  const response = await fetch('/api'+path, {...options, headers});
+  setLoading(1);
+  let response;
+  try { response = await fetch('api'+path, {...options, headers}); }
+  catch { throw new Error('No hay conexión con el servidor. Revisa tu internet e inténtalo de nuevo en unos segundos.'); }
+  finally { setLoading(-1); }
   let data;
-  try { data=await response.json(); } catch { data={mensaje:'El servidor no devolvió una respuesta válida.'}; }
+  try { data=await response.json(); } catch { data={mensaje:'El servidor no respondió como se esperaba. Inténtalo de nuevo en unos segundos.'}; }
   if(!response.ok) {
     if(response.status===401 && path!=='/login') { state.usuario=null; renderLogin(); }
-    throw new Error((data.mensaje || 'No se pudo completar la operación.')+(data.detalles?.length?' '+data.detalles.join(' · '):''));
+    const err=new Error((data.mensaje || 'No se pudo completar la operación.')+(data.detalles?.length?' '+data.detalles.join(' · '):''));
+    err.status=response.status;err.campos=data.campos||null;
+    throw err;
   }
   return data;
 }
 const send = (path, body, method='POST') => api(path,{method,body:JSON.stringify(body)});
-function notice(text, error=false) { const n=$('#notice');n.textContent=text;n.className=error?'error':'';n.hidden=false; }
+// Avisos flotantes. Los de éxito se cierran solos; los de error quedan hasta que la persona los cierra.
+// Un aviso puede ofrecer una acción, por ejemplo "Deshacer".
+function notice(text, error=false, accion=null) {
+  const box=$('#toasts');if(!box)return;
+  const t=document.createElement('div');
+  t.className=`toast ${error?'error':'ok'}`;t.setAttribute('role',error?'alert':'status');
+  t.innerHTML=`${icon(error?'alert':'check',20)}<p>${e(text)}</p>${accion?`<button type="button" class="toast-action">${e(accion.texto)}</button>`:''}<button type="button" class="toast-close" aria-label="Cerrar aviso">${icon('close',16)}</button>`;
+  const close=()=>{t.classList.add('leaving');setTimeout(()=>t.remove(),180);};
+  t.querySelector('.toast-close').addEventListener('click',close);
+  if(accion)t.querySelector('.toast-action').addEventListener('click',async()=>{close();try{await accion.fn();}catch(err){notice(err.message,true);}});
+  if(error)box.querySelectorAll('.toast.error').forEach(x=>x.remove());
+  box.appendChild(t);
+  if(!error)setTimeout(close,accion?9000:5000);
+}
+const clearErrors=()=>$('#toasts')?.querySelectorAll('.toast.error').forEach(x=>x.remove());
+// Ventana de confirmación propia (heurística 5: prevenir errores). Devuelve true si la persona confirma.
+function confirmar({titulo,mensaje,aceptar='Confirmar',peligro=false}) {
+  return new Promise(resolve=>{
+    const previo=document.activeElement;
+    const capa=document.createElement('div');capa.className='modal-backdrop';
+    capa.innerHTML=`<div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-text"><div class="modal-icon ${peligro?'danger':''}">${icon(peligro?'alert':'check',22)}</div><h2 id="modal-title">${e(titulo)}</h2><p id="modal-text">${e(mensaje)}</p><div class="modal-actions"><button type="button" class="button secondary" data-modal="no">Cancelar</button><button type="button" class="button ${peligro?'danger':''}" data-modal="si">${e(aceptar)}</button></div></div>`;
+    const cerrar=valor=>{capa.remove();document.removeEventListener('keydown',teclas,true);previo?.focus?.();resolve(valor);};
+    const teclas=ev=>{
+      if(ev.key==='Escape'){ev.stopPropagation();cerrar(false);}
+      if(ev.key==='Tab'){const b=[...capa.querySelectorAll('button')];const i=b.indexOf(document.activeElement);ev.preventDefault();b[(i+(ev.shiftKey?-1:1)+b.length)%b.length].focus();}
+    };
+    capa.addEventListener('click',ev=>{if(ev.target===capa)cerrar(false);const b=ev.target.closest('[data-modal]');if(b)cerrar(b.dataset.modal==='si');});
+    document.addEventListener('keydown',teclas,true);
+    document.body.appendChild(capa);capa.querySelector('[data-modal="no"]').focus();
+  });
+}
 function heading(title,description,action='') { return `<div class="heading"><div><div class="eyebrow">FORMACIÓN PRÁCTICA</div><h1>${e(title)}</h1><p>${e(description)}</p></div>${action}</div>`; }
+// Los campos obligatorios llevan un asterisco; cada formulario con obligatorios muestra la leyenda que lo explica.
+const req='<span class="req" aria-hidden="true"> *</span>';
 function field(label,name,type='text',required=true,max=150,value='') {
-  return `<label class="field">${e(label)}${required?' *':''}<input name="${name}" type="${type}" ${required?'required':''} maxlength="${max}" value="${e(value)}" ${type==='password'?'autocomplete="current-password"':''}></label>`;
+  return `<label class="field">${e(label)}${required?req:''}<input name="${name}" type="${type}" ${required?'required':''} maxlength="${max}" value="${e(value)}" ${type==='password'?'autocomplete="current-password"':''}></label>`;
 }
 function selectField(label,name,items,required=true,selected='') {
-  return `<label class="field">${e(label)}${required?' *':''}<select name="${name}" ${required?'required':''}><option value="">Seleccionar…</option>${items.map(([value,text])=>`<option value="${e(value)}" ${String(value)===String(selected)?'selected':''}>${e(text)}</option>`).join('')}</select></label>`;
+  return `<label class="field">${e(label)}${required?req:''}<select name="${name}" ${required?'required':''}><option value="">Seleccionar…</option>${items.map(([value,text])=>`<option value="${e(value)}" ${String(value)===String(selected)?'selected':''}>${e(text)}</option>`).join('')}</select></label>`;
+}
+// Errores junto a cada campo (heurística 9): qué falló y cómo corregirlo.
+function marcarCampo(el,mensaje) {
+  if(!el || !el.closest)return;
+  el.setAttribute('aria-invalid','true');
+  const box=el.closest('.field')||el.parentElement;
+  let msg=box.querySelector(':scope > .field-error');
+  if(!msg){msg=document.createElement('small');msg.className='field-error';msg.id=`error-${el.name||Math.random().toString(36).slice(2)}`;box.appendChild(msg);}
+  msg.innerHTML=`${icon('alert',14)} ${e(mensaje)}`;el.setAttribute('aria-describedby',msg.id);
+}
+function limpiarCampo(el) {
+  if(!el || !el.removeAttribute)return;
+  el.removeAttribute('aria-invalid');el.removeAttribute('aria-describedby');
+  (el.closest('.field')||el.parentElement)?.querySelector(':scope > .field-error')?.remove();
+}
+function mensajeValidez(el) {
+  const v=el.validity;
+  if(v.valueMissing)return el.type==='file'?'Selecciona un archivo.':el.tagName==='SELECT'?'Selecciona una opción de la lista.':'Este campo es obligatorio.';
+  if(v.typeMismatch && el.type==='email')return 'Escribe un correo válido, por ejemplo nombre@correo.cl.';
+  if(v.badInput)return 'Escribe un número válido.';
+  if(v.rangeUnderflow || v.rangeOverflow)return `El valor debe estar entre ${el.min||'—'} y ${el.max||'—'}.`;
+  if(v.tooLong)return `Usa como máximo ${el.maxLength} caracteres.`;
+  if(v.tooShort)return `Usa al menos ${el.minLength} caracteres.`;
+  return 'Revisa este dato.';
+}
+function validarFormulario(form) {
+  const malos=[];
+  for(const el of form.elements){
+    if(!el.name || el.disabled || !el.willValidate)continue;
+    limpiarCampo(el);
+    if(!el.checkValidity()){marcarCampo(el,mensajeValidez(el));malos.push(el);}
+  }
+  return malos;
+}
+// Fechas legibles: "30 sep 2026" en vez de "2026-09-30".
+const meses=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function fechaCorta(value) {
+  const m=String(value??'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m?`${Number(m[3])} ${meses[Number(m[2])-1]} ${m[1]}`:(value?String(value):'—');
+}
+function diasHasta(value) {
+  const m=String(value??'').match(/^(\d{4})-(\d{2})-(\d{2})/);if(!m)return null;
+  const hoy=new Date();hoy.setHours(0,0,0,0);
+  return Math.round((new Date(Number(m[1]),Number(m[2])-1,Number(m[3]))-hoy)/86400000);
+}
+// Plazo con fecha legible y cuánto falta. "pendiente" indica si el requisito aún espera una entrega del estudiante.
+function plazoTexto(fecha,vencido=false,pendiente=true) {
+  if(!fecha)return '<span data-sort="9999-12-31">Sin plazo</span>';
+  const d=diasHasta(fecha);
+  let rel='';
+  if(pendiente && d!==null) rel=d<0?`venció hace ${-d} ${-d===1?'día':'días'}`:d===0?'vence hoy':d===1?'vence mañana':`vence en ${d} días`;
+  return `<span data-sort="${e(String(fecha).substring(0,10))}">${e(fechaCorta(fecha))}</span>${vencido?' <span class="pill danger">Vencido</span>':''}${rel?`<small class="${vencido||d<=3?'urgent':''}">${rel}</small>`:''}`;
 }
 const options = (items,label) => items.map(x=>[x.id,label(x)]);
 const empty = (title,subtitle='') => `<div class="empty"><strong>${e(title)}</strong><p>${e(subtitle)}</p></div>`;
 const button = (text,attrs='',secondary=false) => `<button class="button ${secondary?'secondary':''}" ${attrs}>${e(text)}</button>`;
 const card = (title,body) => `<section class="card"><div class="card-head"><h2>${e(title)}</h2></div><div class="card-body">${body}</div></section>`;
 const formData = form => Object.fromEntries(new FormData(form));
-const dateText = value => value ? String(value).replace('T',' ').substring(0,19) : '—';
-function onForm(selector, handler) {
+const dateText = value => { if(!value)return '—';const hora=String(value).replace('T',' ').substring(11,16);return fechaCorta(value)+(hora?`, ${hora}`:''); };
+// Todos los formularios: validación con mensajes propios, botón con estado de carga y errores marcados en cada campo.
+// "antes" (opcional) se ejecuta tras validar y antes de mostrar la carga; si devuelve false, no se envía (p. ej. una confirmación).
+function onForm(selector, handler, cargando='Guardando…', antes=null) {
   const form=$(selector);if(!form)return;
+  form.noValidate=true;
+  form.addEventListener('input',ev=>{if(ev.target.getAttribute?.('aria-invalid'))limpiarCampo(ev.target);});
+  form.addEventListener('change',ev=>{if(ev.target.getAttribute?.('aria-invalid'))limpiarCampo(ev.target);});
   form.addEventListener('submit',async event=>{
-    event.preventDefault();const submit=form.querySelector('button[type="submit"],button.button');if(submit)submit.disabled=true;
-    try { await handler(form); } catch(err) { notice(err.message,true); } finally { if(submit)submit.disabled=false; }
+    event.preventDefault();
+    const malos=validarFormulario(form);
+    if(malos.length){malos[0].focus();notice(malos.length===1?'Hay un campo por revisar: está marcado en rojo.':`Hay ${malos.length} campos por revisar: están marcados en rojo.`,true);return;}
+    if(antes && !(await antes(form)))return;
+    const submit=form.querySelector('button[type="submit"]')||form.querySelector('button.button');
+    const texto=submit?.innerHTML;
+    if(submit){submit.disabled=true;submit.classList.add('is-loading');submit.innerHTML=`<span class="spinner" aria-hidden="true"></span>${e(cargando)}`;}
+    try { await handler(form); }
+    catch(err) {
+      if(err.campos)for(const [nombre,mensaje] of Object.entries(err.campos))marcarCampo(form.elements[nombre],mensaje);
+      form.querySelector('[aria-invalid="true"]')?.focus();
+      notice(err.message,true);
+    }
+    finally { if(submit && submit.isConnected){submit.disabled=false;submit.classList.remove('is-loading');submit.innerHTML=texto;} }
   });
 }
 function registerPage(key,label,roles,render,bind=()=>{}) { pages[key]={label,roles,render,bind}; }
@@ -72,7 +188,8 @@ const iconPaths={
   arrow:'<path d="M5 12h14M13 6l6 6-6 6"/>',
 };
 const icon=(name,size=18)=>`<svg class="icon" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[name]||''}</svg>`;
-const statTile=(iconName,value,label)=>`<div class="stat">${icon(iconName,20)}<div class="number">${value||0}</div><div class="label">${e(label)}</div></div>`;
+// Tarjeta de cifra. "ayuda" explica qué cuenta la cifra (aparece al pasar el mouse o al enfocarla con el teclado).
+const statTile=(iconName,value,label,ayuda='')=>`<div class="stat" ${ayuda?`tabindex="0" data-tip="${e(ayuda)}" aria-label="${e(`${value||0} ${label}. ${ayuda}`)}"`:''}>${icon(iconName,20)}<div class="number">${value||0}</div><div class="label">${e(label)}${ayuda?` <span class="tip-mark" aria-hidden="true">?</span>`:''}</div></div>`;
 const pageIcons={mipanel:'home',resumen:'home',indicadores:'chart',practicas:'clipboard',estudiantes:'users',centros:'school',plantillas:'calendar',materiales:'book',asistente:'chat',usuarios:'shield'};
 // Se ejecutan al iniciar o cerrar sesión y en cada cambio de página (por ejemplo, el asistente flotante).
 const sessionHooks=[];
@@ -141,17 +258,25 @@ async function load() {
   else {state.estudiantes=[];state.centros=[];}
 }
 let navigation=0;
+// Se ejecutan después de dibujar cada página (buscador en tablas, leyenda de obligatorios, etc.).
+const pageHooks=[];
+const skeleton=()=>`<div class="skeleton" aria-hidden="true"><div class="sk sk-title"></div><div class="sk sk-line"></div><div class="sk-grid"><div class="sk sk-box"></div><div class="sk sk-box"></div><div class="sk sk-box"></div><div class="sk sk-box"></div></div><div class="sk sk-card"></div></div><p class="sr-only">Cargando la página…</p>`;
 async function go(page,id) {
   const target=pages[page];if(!target || !role(...target.roles))return;
-  const turn=++navigation;state.page=page;
+  const turn=++navigation;state.page=page;clearErrors();
+  const espera=setTimeout(()=>{if(turn===navigation)$('#app').innerHTML=skeleton();},150);
   try {
     const html=await target.render(id);if(turn!==navigation || !state.usuario)return;
     $('#app').innerHTML=html;$('#breadcrumb').textContent=target.label || 'Seguimiento individual';renderNav();target.bind(id);
+    window.scrollTo(0,0);$('#app').focus({preventScroll:true});
+    pageHooks.forEach(hook=>{try{hook(page,id);}catch(err){console.error(err);}});
   } catch(err) { notice(err.message,true); }
+  finally { clearTimeout(espera); }
 }
 async function saved(page,id) { await load();await go(page,id);notice('Información guardada correctamente.'); }
 function renderLogin() {
   navigation++;document.body.classList.add('signed-out');$('nav').innerHTML='';$('#profile').hidden=true;closeProfileMenu();runSessionHooks();
+  let recordado='';try { recordado=localStorage.getItem('correoRecordado')||''; } catch { recordado=''; }
   const features=[['clipboard','Requisitos, plazos y entregas de cada práctica'],['check','Revisión de entregas con historial de versiones'],['chat','Asistente con el material de tus profesores']];
   $('#app').innerHTML=`<div class="login-shell">
     <section class="login-brand">
@@ -166,18 +291,29 @@ function renderLogin() {
       <h2>Iniciar sesión</h2>
       <p class="login-lead">Ingresa con la cuenta asignada por la coordinación.</p>
       <form id="login-form" novalidate>
-        <label class="field">Correo<span class="input-icon">${icon('mail')}<input name="username" type="email" required maxlength="150" autocomplete="username" placeholder="nombre@correo.cl"></span></label>
-        <label class="field">Contraseña<span class="input-icon">${icon('lock')}<input name="password" type="password" required maxlength="60" autocomplete="current-password"><button type="button" class="toggle-pass" data-toggle-pass aria-label="Mostrar contraseña" aria-pressed="false">${icon('eye')}</button></span></label>
+        <p class="form-legend">Los campos con <span class="req">*</span> son obligatorios.</p>
+        <label class="field">Correo${req}<span class="input-icon">${icon('mail')}<input name="username" type="email" required maxlength="150" autocomplete="username" placeholder="nombre@correo.cl" value="${e(recordado)}"></span></label>
+        <label class="field">Contraseña${req}<span class="input-icon">${icon('lock')}<input name="password" type="password" required maxlength="60" autocomplete="current-password"><button type="button" class="toggle-pass" data-toggle-pass aria-label="Mostrar contraseña" aria-pressed="false">${icon('eye')}</button></span></label>
+        <label class="check"><input type="checkbox" name="recordar" ${recordado?'checked':''}> Recordar mi correo en este equipo</label>
         <button class="button login-submit" type="submit">Entrar al sistema</button>
       </form>
       <p class="login-help">¿No tienes cuenta o no recuerdas tu contraseña? Solicítalo a la coordinación de prácticas.</p>
     </section>
   </div>`;
+  const form=$('#login-form');
+  (recordado?form.elements.password:form.elements.username).focus();
   onForm('#login-form',async form=>{
-    if(!form.elements.username.value.trim() || !form.elements.password.value)throw new Error('Ingresa tu correo y tu contraseña.');
-    await api('/login',{method:'POST',body:new URLSearchParams(new FormData(form))});
-    await refreshSession();document.body.classList.remove('signed-out');$('#notice').hidden=true;await load();await go(homePage());
-  });
+    const datos=new URLSearchParams({username:form.elements.username.value.trim(),password:form.elements.password.value});
+    try { await api('/login',{method:'POST',body:datos}); }
+    catch(err) {
+      // Error de credenciales: se marcan ambos campos sin revelar cuál falló, y se limpia la contraseña.
+      if(err.status===401){marcarCampo(form.elements.username,'Revisa que el correo esté bien escrito.');marcarCampo(form.elements.password,'Revisa la contraseña (distingue mayúsculas y minúsculas).');form.elements.password.value='';}
+      throw err;
+    }
+    try { form.elements.recordar.checked?localStorage.setItem('correoRecordado',datos.get('username')):localStorage.removeItem('correoRecordado'); } catch { /* sin almacenamiento */ }
+    await refreshSession();document.body.classList.remove('signed-out');clearErrors();await load();await go(homePage());
+    notice(`Sesión iniciada. ¡Hola, ${String(state.usuario.nombre).split(' ')[0]}!`);
+  },'Ingresando…');
 }
 function progress(p) {
   const total=Number(p.requeridos),rec=Number(p.recibidos);
@@ -218,7 +354,7 @@ function requirementTable(data) {
   return card('Requisitos',data.configurado?`<div class="scroll"><table><thead><tr><th>REQUISITO</th><th>ESTADO</th></tr></thead><tbody>${data.requisitos.map(r=>`<tr><td>${e(r.nombre)}</td><td><span class="pill">${e(r.estado)}</span></td></tr>`).join('')}</tbody></table></div>`:empty('Sin configuración','Cero requisitos no significa práctica completa.'));
 }
 function documentsTable(data) {
-  return card('Archivos entregados',data.documentos.length?`<div class="scroll"><table><thead><tr><th>ARCHIVO</th><th>REQUISITO</th><th>FECHA</th></tr></thead><tbody>${data.documentos.map(d=>`<tr><td><a href="/api/documentos/${d.id}/descarga">${e(d.nombre_original)}</a></td><td>${e(d.requisito)}</td><td>${e(dateText(d.cargado_en))}</td></tr>`).join('')}</tbody></table></div>`:empty('Todavía no hay archivos'));
+  return card('Archivos entregados',data.documentos.length?`<div class="scroll"><table><thead><tr><th>ARCHIVO</th><th>REQUISITO</th><th>FECHA</th></tr></thead><tbody>${data.documentos.map(d=>`<tr><td><a href="api/documentos/${d.id}/descarga">${e(d.nombre_original)}</a></td><td>${e(d.requisito)}</td><td>${e(dateText(d.cargado_en))}</td></tr>`).join('')}</tbody></table></div>`:empty('Todavía no hay archivos'));
 }
 registerPage('detalle','',allRoles,async id=>{
   const data=await api(`/practicas/${id}/seguimiento`);state.detail=data;const p=data.practica;
@@ -226,13 +362,27 @@ registerPage('detalle','',allRoles,async id=>{
     `<div class="meta"><div>Centro<strong>${e(p.centro||'No corresponde')}</strong></div><div>Profesor responsable<strong>${e(p.profesor_responsable)}</strong></div></div>`+
     `<div class="split wide">${uploadForm(data)}${requirementTable(data)}</div>`+documentsTable(data)+(await Promise.all(detailSections.map(render=>render(data)))).join('');
 },id=>{
-  onForm('#upload-form',async form=>{const file=form.elements.archivo.files[0];if(!file || file.size>10*1024*1024)throw new Error('Selecciona un archivo de hasta 10 MB.');const body=new FormData();body.append('archivo',file);await api(`/practicas/${id}/requisitos/${form.elements.requisitoId.value}/documentos`,{method:'POST',body});await saved('detalle',id);});
+  onForm('#upload-form',async form=>{
+    const file=form.elements.archivo.files[0];
+    if(file.size>10*1024*1024){marcarCampo(form.elements.archivo,'El archivo pesa más de 10 MB. Comprímelo o guárdalo como PDF e inténtalo de nuevo.');throw new Error('El archivo supera el máximo de 10 MB.');}
+    const body=new FormData();body.append('archivo',file);
+    const r=await api(`/practicas/${id}/requisitos/${form.elements.requisitoId.value}/documentos`,{method:'POST',body});
+    await load();await go('detalle',id);
+    notice(`"${r.nombre_original}" se entregó y quedó en revisión.`,false,{texto:'Deshacer',fn:async()=>{
+      await api(`/documentos/${r.id}`,{method:'DELETE'});await load();await go('detalle',id);notice('Entrega eliminada. Ya puedes subir el archivo correcto.');
+    }});
+  },'Subiendo archivo…');
   detailBindings.forEach(bind=>bind(id));
 });
 registerPage('cuenta','Cambiar contraseña',allRoles,()=>heading('Cambiar contraseña','Necesitas conocer tu contraseña actual.')+
   card('Credenciales',`<form id="password-form">${field('Contraseña actual','actual','password',true,60)}${field('Nueva contraseña (10–60 caracteres)','nueva','password',true,60)}${field('Confirmar nueva contraseña','confirmacion','password',true,60)}${button('Actualizar contraseña','type="submit"')}</form>`),()=>{
     $('#password-form').elements.nueva.autocomplete='new-password';$('#password-form').elements.confirmacion.autocomplete='new-password';
-    onForm('#password-form',async form=>{const d=formData(form);if(d.nueva!==d.confirmacion)throw new Error('Las contraseñas nuevas no coinciden.');await send('/cuenta/clave',{actual:d.actual,nueva:d.nueva});form.reset();notice('Contraseña actualizada.');});
+    const f=$('#password-form');f.elements.nueva.minLength=10;f.elements.confirmacion.minLength=10;
+    onForm('#password-form',async form=>{
+      const d=formData(form);
+      if(d.nueva!==d.confirmacion){marcarCampo(form.elements.confirmacion,'No coincide con la nueva contraseña. Escríbela otra vez.');throw new Error('Las contraseñas nuevas no coinciden.');}
+      await send('/cuenta/clave',{actual:d.actual,nueva:d.nueva});form.reset();notice('Contraseña actualizada. Úsala la próxima vez que inicies sesión.');
+    });
 });
 document.addEventListener('keydown',event=>{
   if(event.key==='Escape' && !$('#profile-menu').hidden){closeProfileMenu();$('#profile-button').focus();}
@@ -248,13 +398,13 @@ document.addEventListener('click',async event=>{
   }
   if(target.closest('#profile-menu'))closeProfileMenu();
   try {
-    if(target.dataset.page){$('#notice').hidden=true;await go(target.dataset.page);}
-    else if(target.dataset.detail){$('#notice').hidden=true;await go('detalle',target.dataset.detail);}
+    if(target.dataset.page){await go(target.dataset.page);}
+    else if(target.dataset.detail){await go('detalle',target.dataset.detail);}
     else if(target.dataset.action && actions[target.dataset.action]){target.disabled=true;await actions[target.dataset.action](target);}
-    else if(target.id==='logout'){await api('/logout',{method:'POST'});state.usuario=null;await refreshSession();renderLogin();}
+    else if(target.id==='logout'){await api('/logout',{method:'POST'});state.usuario=null;await refreshSession();renderLogin();notice('Cerraste sesión correctamente.');}
   } catch(err) {notice(err.message,true);} finally {target.disabled=false;}
 });
 document.addEventListener('DOMContentLoaded',async()=>{
   try {await refreshSession();if(!state.usuario){renderLogin();return;}await load();await go(homePage());}
-  catch(err){$('#app').innerHTML=empty('No se pudo iniciar','Comprueba la conexión con el servidor y MySQL.');notice(err.message,true);}
+  catch(err){$('#app').innerHTML=empty('No se pudo conectar con el sistema','Revisa tu conexión a internet y recarga la página (F5). Si el problema continúa, avisa a la coordinación.');notice(err.message,true);}
 });

@@ -20,7 +20,26 @@ public class ErroresApi {
     ResponseEntity<Map<String,Object>> negocio(Problema e) { return respuesta(e.estado,e.getMessage(),List.of()); }
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<Map<String,Object>> validacion(MethodArgumentNotValidException e) {
-        return respuesta(HttpStatus.BAD_REQUEST,"Revisa los campos obligatorios y sus formatos.",e.getBindingResult().getFieldErrors().stream().map(x->x.getField()+": "+x.getDefaultMessage()).toList());
+        // "campos" permite que la interfaz marque cada campo con un mensaje claro y la forma de corregirlo.
+        var campos=new LinkedHashMap<String,String>();
+        for(var x:e.getBindingResult().getFieldErrors())campos.putIfAbsent(x.getField(),explicar(x.getCode(),x.getArguments()));
+        var cuerpo=new LinkedHashMap<String,Object>();
+        cuerpo.put("mensaje","Revisa los campos marcados en rojo.");
+        cuerpo.put("detalles",List.of());
+        cuerpo.put("campos",campos);
+        return ResponseEntity.badRequest().body(cuerpo);
+    }
+    static String explicar(String codigo,Object[] argumentos) {
+        if(codigo==null)return "Revisa este dato.";
+        return switch(codigo) {
+            case "NotBlank","NotNull","NotEmpty" -> "Este campo es obligatorio.";
+            case "Email" -> "Escribe un correo válido, por ejemplo nombre@correo.cl.";
+            case "Size" -> argumentos!=null && argumentos.length>=3
+                ?"Debe tener entre "+argumentos[2]+" y "+argumentos[1]+" caracteres.":"El largo del texto no es válido.";
+            case "Min","Max","Positive" -> "El número está fuera del rango permitido.";
+            case "Pattern" -> "El formato no es válido. Usa solo letras, números o guiones.";
+            default -> "Revisa este dato.";
+        };
     }
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<Map<String,Object>> integridad(DataIntegrityViolationException e) {

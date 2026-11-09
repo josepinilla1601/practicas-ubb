@@ -1,0 +1,22 @@
+# Aplicación Spring Boot. Usa el .jar copiado en ~/bestpem/app.jar.
+# Si arranca antes de que MySQL esté listo, systemd la vuelve a intentar.
+[Unit]
+Description=Prácticas UBB (Spring Boot)
+Requires=bestpem-db.service
+After=bestpem-db.service
+
+[Container]
+ContainerName=bestpem-app
+Image=docker.io/library/eclipse-temurin:21-jre
+Pod=bestpem.pod
+Volume=%h/bestpem/app.jar:/app/app.jar:ro,Z
+EnvironmentFile=%h/bestpem/app.env
+Environment=TZ=America/Santiago
+Exec=java -Xmx512m -jar /app/app.jar
+
+[Service]
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=default.target
