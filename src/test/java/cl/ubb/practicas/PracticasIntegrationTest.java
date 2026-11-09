@@ -374,6 +374,18 @@ class PracticasIntegrationTest {
    // Si la IA no responde, se usa la respuesta fija.
    RESPUESTA_IA.set("CUPO");
    assertTrue(preguntar(alumno,"¿me podrías explicar un archivo si te lo mando?").get("respuesta").asText().contains("clip"));
+   // Apoyo matemático: la IA marca la respuesta y se muestra con su advertencia.
+   RESPUESTA_IA.set("[MATEMATICA] 2x + 5 = 17, entonces 2x = 12 y x = 6.");
+   var mate=preguntar(alumno,"Resuelve 2x + 5 = 17 paso a paso");
+   assertEquals("MATEMATICA",mate.get("tipo").asText());
+   assertTrue(mate.get("respuesta").asText().startsWith("2x + 5 = 17, entonces"));
+   assertTrue(mate.get("respuesta").asText().contains("revisa los pasos"));
+   RESPUESTA_IA.set("[AYUDA] Usa el botón Ayuda.");
+   assertEquals("Usa el botón Ayuda.",preguntar(alumno,"¿Dónde encuentro ayuda?").get("respuesta").asText());
+  }
+  @Test void citasAFuentesInexistentesSeEliminan(){
+   assertEquals("Dato [1] y otro dato.",AsistenteController.citasValidas("Dato [1] y otro dato [4].",1));
+   assertEquals("Uno [1], dos [2].",AsistenteController.citasValidas("Uno [1], dos [2].",2));
   }
   byte[] docx(String texto)throws Exception{
    var salida=new java.io.ByteArrayOutputStream();

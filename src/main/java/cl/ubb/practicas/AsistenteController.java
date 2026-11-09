@@ -36,7 +36,8 @@ public class AsistenteController {
     private static final String INSTRUCCIONES_MATERIAL="""
         Eres el asistente del sistema Prácticas UBB (Pedagogía en Educación Matemática, Universidad del Bío-Bío).
         Responde en español de Chile, con un tono cercano y claro, en máximo seis oraciones o una lista corta. No saludes ni te presentes: ve directo a la respuesta.
-        Usa SOLO la información de los fragmentos numerados que se entregan. Después de cada dato indica entre corchetes el número del fragmento de donde lo sacaste, por ejemplo [1]. Usa solo números de fragmentos que existan.
+        Usa SOLO la información de los fragmentos numerados que se entregan. Después de cada dato indica entre corchetes el número del fragmento de donde lo sacaste, por ejemplo [1].
+        Usa solo números de fragmentos que existan; los números de artículos o secciones del documento no son fragmentos.
         Si los fragmentos no permiten responder la pregunta, responde exactamente: "%s"
         No inventes datos, fechas ni porcentajes. No uses formato Markdown (ni asteriscos ni #); para listas usa "• ".
         """.formatted(SIN_INFORMACION);
@@ -61,18 +62,23 @@ public class AsistenteController {
         - Profesores de colegio: registran fortalezas y aspectos por mejorar de sus practicantes.
         - Asistente: responde preguntas con el material publicado por los profesores y cita la fuente. Si eres estudiante, también te dice tus requisitos pendientes y plazos (pregunta "¿Qué tengo pendiente?").
         - Explicar un documento: en el asistente flotante, pulsa el clip (a la izquierda del cuadro de texto) y elige un PDF, Word (DOCX), TXT o MD; si quieres algo específico, escribe tu pregunta antes de adjuntarlo. En la página "Asistente" también está la sección "Explicar un documento", donde puedes elegir un material publicado. El archivo no se guarda.
+        - Apoyo matemático: el asistente resuelve y explica paso a paso ejercicios de matemática y da ideas para enseñar un contenido en el aula.
         - Dictado por voz: en los campos de texto largos y en el asistente hay un micrófono; púlsalo, permite el micrófono y habla. Puedes decir "coma", "punto y seguido" o "punto y aparte". Funciona en Chrome y Edge.
         - Ayuda: el botón "? Ayuda" (arriba) explica cada página paso a paso; la tecla ? también la abre. La guía de bienvenida está en tu nombre, arriba a la derecha.
         - Contraseña olvidada: la coordinación de prácticas asigna una nueva; luego se cambia en tu nombre → Cambiar contraseña.
         """;
     private static final String INSTRUCCIONES_GENERAL="""
-        Eres el asistente del sistema Prácticas UBB (Pedagogía en Educación Matemática, Universidad del Bío-Bío).
-        Responde en español de Chile, con tono cercano y breve (máximo cinco oraciones o una lista corta). No uses Markdown; para listas usa "• ".
-        Si la pregunta es un saludo, un agradecimiento o trata sobre cómo usar la plataforma o el asistente, respóndela usando SOLO la guía entregada.
-        Saluda solo si el usuario saludó. Si pregunta qué puedes hacer, menciona todas las funciones del asistente que aparecen en la guía (material con fuentes, pendientes y plazos, explicar documentos y dictado).
-        Si pregunta por reglamentos, requisitos académicos, fechas, porcentajes, notas u otra información de las prácticas que no está en la guía,
-        o si no tiene relación con las prácticas, responde exactamente: "%s"
-        No inventes funciones que no estén en la guía.
+        Eres el asistente del sistema Prácticas UBB, para estudiantes y profesores de Pedagogía en Educación Matemática (Universidad del Bío-Bío).
+        Responde en español de Chile, con tono cercano. No uses Markdown (ni asteriscos ni #); para listas usa "• ". Saluda solo si el usuario saludó.
+        Clasifica la pregunta y empieza tu respuesta con la etiqueta que corresponda:
+        [AYUDA] Saludos, agradecimientos o cómo usar la plataforma o el asistente. Responde SOLO con la guía entregada, en máximo cinco oraciones.
+          Si pregunta qué puedes hacer, menciona todas las funciones de la guía (material con fuentes, pendientes y plazos, explicar documentos, apoyo matemático y dictado).
+        [MATEMATICA] Ejercicios o conceptos de matemática, o cómo enseñar un contenido matemático en el aula (didáctica, actividades, errores frecuentes de los alumnos).
+          Resuelve paso a paso y explica el porqué de cada paso, de forma clara y verificable. Escribe las expresiones en texto simple (por ejemplo x^2, raíz(2), 3/4).
+          Si es sobre enseñanza, da ideas concretas para el aula escolar chilena. Máximo unas 250 palabras.
+        Si pregunta por reglamentos, requisitos académicos, fechas, porcentajes, notas u otra información institucional de las prácticas,
+        o si no tiene relación con las prácticas ni con la matemática, responde exactamente: "%s"
+        No inventes funciones de la plataforma ni información institucional.
         """.formatted(SIN_INFORMACION);
 
     private static final Set<String> PALABRAS_PLAZO=Set.of("pendiente","plazo","vence","vencen","vencido","vencida","atrasado","atrasada","atraso");
@@ -169,6 +175,12 @@ public class AsistenteController {
         return db.queryForList(sql+" ORDER BY m.titulo",args.toArray());
     }
 
+    /** Quita las citas a fuentes que no existen (por ejemplo, la IA confunde "Artículo 3" con la fuente [3]). */
+    static String citasValidas(String texto,int fuentes) {
+        return java.util.regex.Pattern.compile(" ?\\[(\\d+)\\]").matcher(texto)
+            .replaceAll(m -> { int n=Integer.parseInt(m.group(1));return n>=1 && n<=fuentes?java.util.regex.Matcher.quoteReplacement(m.group()):""; });
+    }
+
     private static final Map<String,Object> FUENTE_GUIA=Map.of("titulo","Guía de uso de Prácticas UBB","tipo","GUIA");
     private static Map<String,Object> sinRespaldo() {
         return Map.of("tipo","SIN_RESPALDO","fuentes",List.of(),"respuesta","No encontré información suficiente en el material publicado para responder con seguridad. "+
@@ -179,7 +191,10 @@ public class AsistenteController {
     private Map<String,Object> sinFragmentos(Map<String,Object> usuario,String pregunta) {
         if(ia.disponible()) {
             try {
-                String respuesta=ia.generar(INSTRUCCIONES_GENERAL,GUIA_SISTEMA+"\nRol de quien pregunta: "+usuario.get("rol")+"\n\nPregunta: "+pregunta);
+                String respuesta=ia.generar(INSTRUCCIONES_GENERAL,GUIA_SISTEMA+"\nRol de quien pregunta: "+usuario.get("rol")+"\n\nPregunta: "+pregunta).strip();
+                if(respuesta.startsWith("[MATEMATICA]"))
+                    return Map.of("tipo","MATEMATICA","respuesta",respuesta.substring(12).strip()+"\n\nRespuesta generada con IA: revisa los pasos antes de usarla en clases o en una evaluación.","fuentes",List.of());
+                if(respuesta.startsWith("[AYUDA]"))respuesta=respuesta.substring(7).strip();
                 return respuesta.startsWith(SIN_INFORMACION)?sinRespaldo():Map.of("tipo","AYUDA","respuesta",respuesta,"fuentes",List.of(FUENTE_GUIA));
             } catch(ModeloIA.Falla f) { /* sin IA disponible: se usan las respuestas fijas */ }
         }
@@ -198,7 +213,7 @@ public class AsistenteController {
             return "Sí. En los campos de texto largos y aquí en el asistente hay un botón de micrófono. Púlsalo, permite el micrófono y habla: el texto se escribe solo. Puedes decir \"coma\", \"punto y seguido\" o \"punto y aparte\". Para terminar, vuelve a pulsarlo o presiona Esc. Funciona en Chrome y Edge.";
         if(t.matches(".*\\b(que puedes hacer|que sabes hacer|como funcionas|para que sirves|como te uso|como funciona el asistente|en que me puedes ayudar)\\b.*") || t.equals("ayuda"))
             return "Puedo ayudarte con esto:\n• Responder preguntas con el material publicado por tus profesores, citando la fuente.\n• Decirte tus requisitos pendientes y plazos (pregunta \"¿Qué tengo pendiente?\").\n"+
-                (iaActiva?"• Explicarte un documento: pulsa el clip y adjunta un PDF, Word, TXT o MD.\n":"")+"• También puedes dictarme con el micrófono. Para ayuda de cada página, usa el botón \"? Ayuda\".";
+                (iaActiva?"• Explicarte un documento: pulsa el clip y adjunta un PDF, Word, TXT o MD.\n• Resolver y explicar ejercicios de matemática, o darte ideas para enseñar un contenido.\n":"")+"• También puedes dictarme con el micrófono. Para ayuda de cada página, usa el botón \"? Ayuda\".";
         if(t.matches("(muchas )?gracias\\b.*") || t.matches("(ok|vale|perfecto) gracias\\b.*"))
             return "¡De nada! Si necesitas algo más, aquí estoy.";
         if(t.matches("(hola|holi|buenas|buenos dias|buenas tardes|buenas noches)\\b.*"))
@@ -254,9 +269,9 @@ public class AsistenteController {
             contexto.append("\nPregunta: ").append(pregunta);
             try {
                 String respuesta=ia.generar(INSTRUCCIONES_MATERIAL,contexto.toString());
-                if(respuesta.startsWith(SIN_INFORMACION))
-                    return Map.of("tipo","SIN_RESPALDO","fuentes",List.of(),"respuesta",SIN_INFORMACION+" Prueba con otras palabras o consulta directamente a tu profesor.");
-                return Map.of("tipo","IA","respuesta",respuesta,"fuentes",fuentes);
+                // El material no responde la pregunta: puede ser de matemática o sobre la plataforma.
+                if(respuesta.startsWith(SIN_INFORMACION))return sinFragmentos(usuario,pregunta);
+                return Map.of("tipo","IA","respuesta",citasValidas(respuesta,fuentes.size()),"fuentes",fuentes);
             } catch(ModeloIA.Falla f) {
                 nota="\n\n("+f.getMessage()+" Te muestro los fragmentos más relevantes del material.)";
             }
