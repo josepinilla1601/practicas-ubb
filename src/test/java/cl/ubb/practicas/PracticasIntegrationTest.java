@@ -187,6 +187,55 @@ class PracticasIntegrationTest {
    cuenta("revisor@test.example","PROFESOR_UBB",null);
    mvc.perform(post("/api/documentos/"+d+"/revision").with(user("revisor@test.example").roles("PROFESOR_UBB")).contentType("application/json").content("{\"decision\":\"APROBADO\"}")).andExpect(status().isNotFound());
   }
+  @Test void deshacerEntregaYRevisionSoloEnLaVersionMasReciente()throws Exception{
+   long p=practica("UNDO-1","INI1",2026),r=requisito(p);
+   long estudiante=db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,p);
+   cuenta("undo-alumno@test.example","ESTUDIANTE",estudiante);
+   var alumno=user("undo-alumno@test.example").roles("ESTUDIANTE");
+   // El estudiante elimina una entrega subida por error, antes de que se revise.
+   long v1=subir(p,r,"equivocado.pdf",pdf(),201).get("id").asLong();
+   mvc.perform(delete("/api/documentos/"+v1).with(alumno)).andExpect(status().isOk());
+   assertEquals("PENDIENTE",estadoRequisito(p,r).get("estado").asText());
+   mvc.perform(delete("/api/documentos/"+v1).with(alumno)).andExpect(status().isNotFound());
+   // Una versión revisada no se elimina, pero la revisión se puede deshacer.
+   long v2=subir(p,r,"correcto.pdf",pdf(),201).get("id").asLong();
+   revisar(v2,"APROBADO","",201);
+   mvc.perform(delete("/api/documentos/"+v2).with(alumno)).andExpect(status().isBadRequest());
+   mvc.perform(delete("/api/documentos/"+v2+"/revision").with(alumno)).andExpect(status().isForbidden());
+   mvc.perform(delete("/api/documentos/"+v2+"/revision")).andExpect(status().isOk());
+   assertEquals("EN_REVISION",estadoRequisito(p,r).get("estado").asText());
+   mvc.perform(delete("/api/documentos/"+v2+"/revision")).andExpect(status().isBadRequest());
+   // Si ya hay una versión nueva, la revisión anterior queda cerrada.
+   revisar(v2,"OBSERVADO","Agrega la bibliografía.",201);
+   long v3=subir(p,r,"v3.pdf",pdf(),201).get("id").asLong();
+   mvc.perform(delete("/api/documentos/"+v2+"/revision")).andExpect(status().isBadRequest());
+   // Un profesor asignado no puede deshacer la revisión de otra persona; uno no asignado ni ve la entrega.
+   long profesor=cuenta("undo-profe@test.example","PROFESOR_UBB",null);
+   var profe=user("undo-profe@test.example").roles("PROFESOR_UBB");
+   mvc.perform(delete("/api/documentos/"+v3+"/revision").with(profe)).andExpect(status().isNotFound());
+   mvc.perform(put("/api/practicas/"+p+"/docentes").contentType("application/json").content("{\"profesorUbbId\":"+profesor+"}")).andExpect(status().isOk());
+   revisar(v3,"APROBADO","",201);
+   mvc.perform(delete("/api/documentos/"+v3+"/revision").with(profe)).andExpect(status().isForbidden());
+   assertEquals("APROBADO",estadoRequisito(p,r).get("estado").asText());
+  }
+  @Test void validacionIndicaQueCampoFalloYComoCorregirlo()throws Exception{
+   mvc.perform(post("/api/estudiantes").contentType("application/json").content("{\"identificador\":\"\",\"nombres\":\"Ana\",\"apellidos\":\"Soto\",\"correo\":\"sin-arroba\"}"))
+    .andExpect(status().isBadRequest())
+    .andExpect(jsonPath("$.campos.identificador").value("Este campo es obligatorio."))
+    .andExpect(jsonPath("$.campos.correo").value(org.hamcrest.Matchers.containsString("correo válido")))
+    .andExpect(jsonPath("$.campos.nombres").doesNotExist());
+  }
+  @Test @WithAnonymousUser void loginDistingueCuentaDesactivada()throws Exception{
+   org.springframework.security.test.context.TestSecurityContextHolder.clearContext();
+   db.update("UPDATE usuarios SET clave_hash=?,activo=FALSE",encoder.encode("InicialSegura2026"));
+   mvc.perform(post("/api/login").param("username","coordinacion@test.example").param("password","InicialSegura2026"))
+    .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.mensaje").value(org.hamcrest.Matchers.containsString("desactivada")));
+   // Con una clave incorrecta no se revela si la cuenta existe o está desactivada.
+   mvc.perform(post("/api/login").param("username","coordinacion@test.example").param("password","otra"))
+    .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.mensaje").value(org.hamcrest.Matchers.containsString("no coinciden")));
+   mvc.perform(post("/api/login").param("username","nadie@test.example").param("password","otra"))
+    .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.mensaje").value(org.hamcrest.Matchers.containsString("no coinciden")));
+  }
   @Test void s215IndicadoresDistinguenEstadosYAtrasos()throws Exception{
    long p=practica("IND-1","INT1",2026);
    long sinConfig=practica("IND-2","INI1",2031);

@@ -16,7 +16,7 @@ registerPage('asistente','Asistente',allRoles,async()=>{
     `<div>${card('Conversación',`<div class="messages" id="chat-messages">${history.length?history.map(chatMessage).join(''):empty('Haz tu primera pregunta','Solo tú puedes ver tu historial.')}</div><form id="chat-form">${field('Escribe tu pregunta','pregunta','text',true,1000)}${button('Preguntar','type="submit"')}<p class="hint">Asistente básico por palabras clave: no inventa respuestas. Verifica siempre la información importante con tu profesor.</p></form>`)}</div></div>`;
 },()=>{
   const box=$('#chat-messages');if(box)box.scrollTop=box.scrollHeight;
-  onForm('#chat-form',async f=>{await send('/asistente',{pregunta:f.elements.pregunta.value});await go('asistente');$('#chat-form input').focus();});
+  onForm('#chat-form',async f=>{await send('/asistente',{pregunta:f.elements.pregunta.value});await go('asistente');$('#chat-form input').focus();},'Consultando…');
 });
 actions['ask-suggestion']=async t=>{await send('/asistente',{pregunta:t.dataset.question});await go('asistente');};
 

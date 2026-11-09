@@ -22,8 +22,16 @@ registerPage('materiales','Material de consulta',['COORDINADOR','PROFESOR_UBB'],
   onForm('#material-form',async f=>{
     const file=f.elements.archivo.files[0];if(!file || file.size>10*1024*1024)throw new Error('Selecciona un archivo de hasta 10 MB.');
     const r=await api('/materiales',{method:'POST',body:new FormData(f)});state.materialPreview=r.id;await go('materiales');notice(r.mensaje);
-  });
+  },'Procesando material…');
   onForm('#material-filter',async f=>{state.materialFilter=formData(f);state.materialPreview=null;await go('materiales');});
 });
-actions['material-state']=async t=>{const r=await send(`/materiales/${t.dataset.id}/estado`,{estado:t.dataset.state},'PATCH');await go('materiales');notice(r.mensaje);};
+actions['material-state']=async t=>{
+  const publicar=t.dataset.state==='PUBLICADO';
+  const ok=await confirmar(publicar
+    ?{titulo:'¿Publicar este material?',mensaje:'El asistente empezará a usarlo para responder a los estudiantes de esa asignatura y período.',aceptar:'Publicar'}
+    :{titulo:'¿Retirar este material?',mensaje:'El asistente dejará de usarlo. Podrás volver a publicarlo cuando quieras.',aceptar:'Retirar',peligro:true});
+  if(!ok)return;
+  const r=await send(`/materiales/${t.dataset.id}/estado`,{estado:t.dataset.state},'PATCH');await go('materiales');
+  notice(r.mensaje,false,{texto:'Deshacer',fn:async()=>{await send(`/materiales/${t.dataset.id}/estado`,{estado:publicar?'RETIRADO':'PUBLICADO'},'PATCH');await go('materiales');notice('Cambio deshecho.');}});
+};
 actions['material-preview']=async t=>{state.materialPreview=t.dataset.id;await go('materiales');};
