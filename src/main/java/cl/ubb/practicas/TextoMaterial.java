@@ -35,6 +35,31 @@ public final class TextoMaterial {
         return new Extraccion(tipo,texto);
     }
 
+    /** Texto de un documento para que el asistente lo explique: PDF, TXT, MD o Word (DOCX). */
+    public static String textoDocumento(String nombre,byte[] bytes) {
+        if(!nombre.toLowerCase(Locale.ROOT).endsWith(".docx")) {
+            String lower=nombre.toLowerCase(Locale.ROOT);
+            if(!(lower.endsWith(".pdf") || lower.endsWith(".txt") || lower.endsWith(".md")))
+                throw Problema.invalido("Formatos que el asistente puede explicar: PDF, DOCX, TXT y MD.");
+            return extraer(nombre,bytes).texto();
+        }
+        String texto=null;
+        try(var zip=new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(bytes))) {
+            for(var entrada=zip.getNextEntry();entrada!=null;entrada=zip.getNextEntry()) {
+                if(!"word/document.xml".equals(entrada.getName()))continue;
+                // Límite de lectura para evitar archivos comprimidos maliciosos.
+                String xml=new String(zip.readNBytes(20_000_000),StandardCharsets.UTF_8);
+                texto=xml.replace("</w:p>","\n").replace("<w:tab/>","\t").replace("<w:br/>","\n").replaceAll("<[^>]+>","")
+                    .replace("&lt;","<").replace("&gt;",">").replace("&quot;","\"").replace("&apos;","'").replace("&amp;","&");
+                break;
+            }
+        } catch(IOException ex) { texto=null; }
+        if(texto==null)throw Problema.invalido("No se pudo leer el documento Word. Guárdalo como PDF e inténtalo de nuevo.");
+        texto=normalizar(texto);
+        if(texto.replaceAll("\\s","").length()<30)throw Problema.invalido("El documento casi no tiene texto para explicar.");
+        return texto;
+    }
+
     static String normalizar(String texto) {
         return texto.replace("\r\n","\n").replace('\r','\n').replaceAll("[\\p{Cntrl}&&[^\n\t]]"," ")
             .replaceAll("[ \t]+"," ").replaceAll(" *\n *","\n").replaceAll("\n{3,}","\n\n").strip();

@@ -44,3 +44,17 @@ Luego carga los datos de demostración desde tu computador:
 ```bash
 APP_URL=https://pacheco.chillan.ubiobio.cl/bestpem node scripts/datos-demo/cargar.mjs
 ```
+
+## Activar el asistente con IA (Gemini)
+
+Agrega la clave al archivo de configuración del servidor y reinicia la aplicación (la clave no se sube a Git):
+
+```bash
+ssh josepinilla1601@pacheco.chillan.ubiobio.cl
+```
+
+```bash
+echo 'GEMINI_API_KEY=tu_clave' >> ~/bestpem/app.env && systemctl --user restart bestpem-app
+```
+
+Sin clave, el asistente sigue funcionando con la búsqueda por palabras clave y la opción "Explicar un documento" aparece como no activada.
