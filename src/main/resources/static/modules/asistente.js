@@ -2,7 +2,7 @@
 
 // S2-18 a S2-20: asistente con respuestas basadas en material publicado, plazos personales e historial.
 // Con la clave de Gemini configurada, la IA redacta las respuestas y explica documentos.
-const answerLabels={IA:['Respuesta con IA','ok'],MATERIAL:['Respuesta con fuentes','ok'],PLAZOS:['Tu seguimiento','review'],SIN_RESPALDO:['Sin respaldo suficiente','pending'],ARCHIVO:['Explicación del documento','review']};
+const answerLabels={IA:['Respuesta con IA','ok'],MATERIAL:['Respuesta con fuentes','ok'],PLAZOS:['Tu seguimiento','review'],SIN_RESPALDO:['Sin respaldo suficiente','pending'],ARCHIVO:['Explicación del documento','review'],AYUDA:['Cómo usar el asistente','review']};
 const formatosExplicables='.pdf,.docx,.txt,.md';
 const avisoPrivacidad='El documento se envía a Google Gemini solo para generar la explicación y no se guarda en el sistema. Evita subir documentos con datos personales sensibles.';
 let iaActiva=null;
