@@ -2,7 +2,8 @@
 
 // S2-18 a S2-20: asistente con respuestas basadas en material publicado, plazos personales e historial.
 // Con la clave de Gemini configurada, la IA redacta las respuestas y explica documentos.
-const answerLabels={IA:['Respuesta con IA','ok'],MATERIAL:['Respuesta con fuentes','ok'],PLAZOS:['Tu seguimiento','review'],SIN_RESPALDO:['Sin respaldo suficiente','pending'],ARCHIVO:['Explicación del documento','review']};
+const answerLabels={IA:['Respuesta con IA','ok'],MATERIAL:['Respuesta con fuentes','ok'],PLAZOS:['Tu seguimiento','review'],SIN_RESPALDO:['Sin respaldo suficiente','pending'],ARCHIVO:['Explicación del documento','review'],AYUDA:['Cómo usar el asistente','review'],MATEMATICA:['Apoyo matemático con IA','ok']};
+const conIA=tipo=>tipo==='IA' || tipo==='ARCHIVO' || tipo==='MATEMATICA';
 const formatosExplicables='.pdf,.docx,.txt,.md';
 const avisoPrivacidad='El documento se envía a Google Gemini solo para generar la explicación y no se guarda en el sistema. Evita subir documentos con datos personales sensibles.';
 let iaActiva=null;
@@ -15,9 +16,9 @@ function fuentesTexto(m,completo) {
 }
 function chatMessage(m) {
   const [label,css]=answerLabels[m.tipo]||['Respuesta',''];
-  return `<div class="message"><strong>Tú</strong>${m.creado_en?` <small>${e(dateText(m.creado_en))}</small>`:''}\n${e(m.pregunta)}</div><div class="message answer"><span class="pill ${css}">${m.tipo==='IA'||m.tipo==='ARCHIVO'?icon('spark',12)+' ':''}${label}</span>\n${e(m.respuesta)}${fuentesTexto(m,true)}</div>`;
+  return `<div class="message"><strong>Tú</strong>${m.creado_en?` <small>${e(dateText(m.creado_en))}</small>`:''}\n${e(m.pregunta)}</div><div class="message answer"><span class="pill ${css}">${conIA(m.tipo)?icon('spark',12)+' ':''}${label}</span>\n${e(m.respuesta)}${fuentesTexto(m,true)}</div>`;
 }
-const sugerencias=()=>role('ESTUDIANTE')?['¿Qué tengo pendiente?','¿Cuáles son mis plazos?','¿Cuál es la asistencia mínima?']:['¿Cuál es la asistencia mínima?','¿Cómo se entrega el informe final?'];
+const sugerencias=()=>role('ESTUDIANTE')?['¿Qué tengo pendiente?','¿Cuál es la asistencia mínima?','Resuelve 2x + 5 = 17 paso a paso']:['¿Cuál es la asistencia mínima?','¿Cómo enseño fracciones equivalentes?'];
 
 registerPage('asistente','Asistente',allRoles,async()=>{
   const [history,ia]=await Promise.all([api('/asistente/historial'),estadoIA()]);
@@ -47,7 +48,7 @@ actions['ask-suggestion']=async t=>{await send('/asistente',{pregunta:t.dataset.
 // Asistente flotante: disponible en todas las páginas sin salir de la que estás usando.
 function widgetMessage(m) {
   const [label,css]=answerLabels[m.tipo]||['Respuesta',''];
-  return `<div class="bubble mine">${e(m.pregunta)}</div><div class="bubble"><span class="pill ${css}">${m.tipo==='IA'||m.tipo==='ARCHIVO'?icon('spark',12)+' ':''}${label}</span>${e(m.respuesta)}${fuentesTexto(m,false)}</div>`;
+  return `<div class="bubble mine">${e(m.pregunta)}</div><div class="bubble"><span class="pill ${css}">${conIA(m.tipo)?icon('spark',12)+' ':''}${label}</span>${e(m.respuesta)}${fuentesTexto(m,false)}</div>`;
 }
 function ensureWidget() {
   if($('#chat-fab'))return;

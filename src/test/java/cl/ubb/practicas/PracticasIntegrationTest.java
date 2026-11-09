@@ -345,15 +345,47 @@ class PracticasIntegrationTest {
    // Si la IA dice que el material no responde, no se inventa nada.
    RESPUESTA_IA.set(AsistenteController.SIN_INFORMACION);
    assertEquals("SIN_RESPALDO",preguntar(alumno,"¿Cuál es la asistencia mínima en el centro de práctica?").get("tipo").asText());
-   // Sin fragmentos relacionados ni siquiera se consulta a la IA.
-   contenidoEnviadoIA="";
+   // Sin fragmentos relacionados, la IA solo recibe la guía de uso; si no corresponde, no se responde.
    assertEquals("SIN_RESPALDO",preguntar(alumno,"¿Quién ganó el campeonato de fútbol?").get("tipo").asText());
-   assertEquals("",contenidoEnviadoIA);
+   assertTrue(contenidoEnviadoIA.contains("Guía de uso") && !contenidoEnviadoIA.contains("90 por ciento"));
    // Con el cupo agotado responde igual, con los fragmentos y un aviso.
    RESPUESTA_IA.set("CUPO");
    var respaldo=preguntar(alumno,"¿Cuál es la asistencia mínima en el centro de práctica?");
    assertEquals("MATERIAL",respaldo.get("tipo").asText());
    assertTrue(respaldo.get("respuesta").asText().contains("90 por ciento") && respaldo.get("respuesta").asText().contains("límite"));
+  }
+  @Test void asistenteExplicaComoUsarseConYSinIA()throws Exception{
+   long p=practica("IA-3","INI1",2026);
+   cuenta("uso@test.example","ESTUDIANTE",db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,p));
+   var alumno=user("uso@test.example").roles("ESTUDIANTE");
+   // Sin IA: respuestas fijas a las preguntas más comunes.
+   var archivo=preguntar(alumno,"¿me podrías explicar un archivo si te lo mando?");
+   assertEquals("AYUDA",archivo.get("tipo").asText());
+   assertTrue(archivo.get("respuesta").asText().contains("no está activada"));
+   assertEquals("AYUDA",preguntar(alumno,"hola").get("tipo").asText());
+   assertTrue(preguntar(alumno,"¿Puedo dictar en vez de escribir?").get("respuesta").asText().contains("micrófono"));
+   assertEquals("SIN_RESPALDO",preguntar(alumno,"¿Quién ganó el campeonato de fútbol?").get("tipo").asText());
+   // Con IA: responde usando la guía del sistema.
+   RESPUESTA_IA.set("Sí. Pulsa el clip y adjunta tu documento.");
+   var conIA=preguntar(alumno,"¿me podrías explicar un archivo si te lo mando?");
+   assertEquals("AYUDA",conIA.get("tipo").asText());
+   assertEquals("Sí. Pulsa el clip y adjunta tu documento.",conIA.get("respuesta").asText());
+   assertTrue(contenidoEnviadoIA.contains("clip"));
+   // Si la IA no responde, se usa la respuesta fija.
+   RESPUESTA_IA.set("CUPO");
+   assertTrue(preguntar(alumno,"¿me podrías explicar un archivo si te lo mando?").get("respuesta").asText().contains("clip"));
+   // Apoyo matemático: la IA marca la respuesta y se muestra con su advertencia.
+   RESPUESTA_IA.set("[MATEMATICA] 2x + 5 = 17, entonces 2x = 12 y x = 6.");
+   var mate=preguntar(alumno,"Resuelve 2x + 5 = 17 paso a paso");
+   assertEquals("MATEMATICA",mate.get("tipo").asText());
+   assertTrue(mate.get("respuesta").asText().startsWith("2x + 5 = 17, entonces"));
+   assertTrue(mate.get("respuesta").asText().contains("revisa los pasos"));
+   RESPUESTA_IA.set("[AYUDA] Usa el botón Ayuda.");
+   assertEquals("Usa el botón Ayuda.",preguntar(alumno,"¿Dónde encuentro ayuda?").get("respuesta").asText());
+  }
+  @Test void citasAFuentesInexistentesSeEliminan(){
+   assertEquals("Dato [1] y otro dato.",AsistenteController.citasValidas("Dato [1] y otro dato [4].",1));
+   assertEquals("Uno [1], dos [2].",AsistenteController.citasValidas("Uno [1], dos [2].",2));
   }
   byte[] docx(String texto)throws Exception{
    var salida=new java.io.ByteArrayOutputStream();

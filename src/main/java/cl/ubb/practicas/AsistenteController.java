@@ -36,7 +36,8 @@ public class AsistenteController {
     private static final String INSTRUCCIONES_MATERIAL="""
         Eres el asistente del sistema Prácticas UBB (Pedagogía en Educación Matemática, Universidad del Bío-Bío).
         Responde en español de Chile, con un tono cercano y claro, en máximo seis oraciones o una lista corta. No saludes ni te presentes: ve directo a la respuesta.
-        Usa SOLO la información de los fragmentos numerados que se entregan. Después de cada dato indica entre corchetes el número del fragmento de donde lo sacaste, por ejemplo [1]. Usa solo números de fragmentos que existan.
+        Usa SOLO la información de los fragmentos numerados que se entregan. Después de cada dato indica entre corchetes el número del fragmento de donde lo sacaste, por ejemplo [1].
+        Usa solo números de fragmentos que existan; los números de artículos o secciones del documento no son fragmentos.
         Si los fragmentos no permiten responder la pregunta, responde exactamente: "%s"
         No inventes datos, fechas ni porcentajes. No uses formato Markdown (ni asteriscos ni #); para listas usa "• ".
         """.formatted(SIN_INFORMACION);
@@ -50,6 +51,35 @@ public class AsistenteController {
         Si el estudiante hace una pregunta, respóndela primero usando solo el documento. Si la respuesta no está en el documento, dilo.
         No inventes información. No uses formato Markdown (ni asteriscos ni #). Sé breve: máximo unas 250 palabras.
         """;
+
+    /** Guía del sistema: la IA la usa para responder preguntas sobre cómo usar la plataforma y el propio asistente. */
+    private static final String GUIA_SISTEMA="""
+        Guía de uso de Prácticas UBB (plataforma de seguimiento de prácticas pedagógicas):
+        - Mi panel (estudiantes): muestra requisitos, plazos, atrasos y estados (Pendiente, En revisión, Corrección solicitada, Aprobado). Los requisitos están ordenados por urgencia.
+        - Entregar un documento: botón "Entregar documento" o "Entregar" en el requisito; se sube un PDF, DOCX o XLSX de hasta 10 MB. Si te equivocas, aparece "Deshacer" o puedes usar "Eliminar entrega" mientras no esté revisada.
+        - Corrección solicitada: el profesor dejó un comentario; se sube una versión corregida en el mismo requisito.
+        - Profesores UBB: revisan entregas en el seguimiento de cada práctica (aprobar o solicitar corrección, con confirmación y opción de deshacer).
+        - Profesores de colegio: registran fortalezas y aspectos por mejorar de sus practicantes.
+        - Asistente: responde preguntas con el material publicado por los profesores y cita la fuente. Si eres estudiante, también te dice tus requisitos pendientes y plazos (pregunta "¿Qué tengo pendiente?").
+        - Explicar un documento: en el asistente flotante, pulsa el clip (a la izquierda del cuadro de texto) y elige un PDF, Word (DOCX), TXT o MD; si quieres algo específico, escribe tu pregunta antes de adjuntarlo. En la página "Asistente" también está la sección "Explicar un documento", donde puedes elegir un material publicado. El archivo no se guarda.
+        - Apoyo matemático: el asistente resuelve y explica paso a paso ejercicios de matemática y da ideas para enseñar un contenido en el aula.
+        - Dictado por voz: en los campos de texto largos y en el asistente hay un micrófono; púlsalo, permite el micrófono y habla. Puedes decir "coma", "punto y seguido" o "punto y aparte". Funciona en Chrome y Edge.
+        - Ayuda: el botón "? Ayuda" (arriba) explica cada página paso a paso; la tecla ? también la abre. La guía de bienvenida está en tu nombre, arriba a la derecha.
+        - Contraseña olvidada: la coordinación de prácticas asigna una nueva; luego se cambia en tu nombre → Cambiar contraseña.
+        """;
+    private static final String INSTRUCCIONES_GENERAL="""
+        Eres el asistente del sistema Prácticas UBB, para estudiantes y profesores de Pedagogía en Educación Matemática (Universidad del Bío-Bío).
+        Responde en español de Chile, con tono cercano. No uses Markdown (ni asteriscos ni #); para listas usa "• ". Saluda solo si el usuario saludó.
+        Clasifica la pregunta y empieza tu respuesta con la etiqueta que corresponda:
+        [AYUDA] Saludos, agradecimientos o cómo usar la plataforma o el asistente. Responde SOLO con la guía entregada, en máximo cinco oraciones.
+          Si pregunta qué puedes hacer, menciona todas las funciones de la guía (material con fuentes, pendientes y plazos, explicar documentos, apoyo matemático y dictado).
+        [MATEMATICA] Ejercicios o conceptos de matemática, o cómo enseñar un contenido matemático en el aula (didáctica, actividades, errores frecuentes de los alumnos).
+          Resuelve paso a paso y explica el porqué de cada paso, de forma clara y verificable. Escribe las expresiones en texto simple (por ejemplo x^2, raíz(2), 3/4).
+          Si es sobre enseñanza, da ideas concretas para el aula escolar chilena. Máximo unas 250 palabras.
+        Si pregunta por reglamentos, requisitos académicos, fechas, porcentajes, notas u otra información institucional de las prácticas,
+        o si no tiene relación con las prácticas ni con la matemática, responde exactamente: "%s"
+        No inventes funciones de la plataforma ni información institucional.
+        """.formatted(SIN_INFORMACION);
 
     private static final Set<String> PALABRAS_PLAZO=Set.of("pendiente","plazo","vence","vencen","vencido","vencida","atrasado","atrasada","atraso");
     private static final Set<String> PALABRAS_PERSONALES=Set.of("mis","me","tengo","debo","falta","faltan","yo");
@@ -145,6 +175,52 @@ public class AsistenteController {
         return db.queryForList(sql+" ORDER BY m.titulo",args.toArray());
     }
 
+    /** Quita las citas a fuentes que no existen (por ejemplo, la IA confunde "Artículo 3" con la fuente [3]). */
+    static String citasValidas(String texto,int fuentes) {
+        return java.util.regex.Pattern.compile(" ?\\[(\\d+)\\]").matcher(texto)
+            .replaceAll(m -> { int n=Integer.parseInt(m.group(1));return n>=1 && n<=fuentes?java.util.regex.Matcher.quoteReplacement(m.group()):""; });
+    }
+
+    private static final Map<String,Object> FUENTE_GUIA=Map.of("titulo","Guía de uso de Prácticas UBB","tipo","GUIA");
+    private static Map<String,Object> sinRespaldo() {
+        return Map.of("tipo","SIN_RESPALDO","fuentes",List.of(),"respuesta","No encontré información suficiente en el material publicado para responder con seguridad. "+
+            "Prueba con otras palabras o consulta directamente a tu profesor.");
+    }
+
+    /** Preguntas que no aparecen en el material: si tratan sobre cómo usar el sistema o el asistente, se responden con la guía. */
+    private Map<String,Object> sinFragmentos(Map<String,Object> usuario,String pregunta) {
+        if(ia.disponible()) {
+            try {
+                String respuesta=ia.generar(INSTRUCCIONES_GENERAL,GUIA_SISTEMA+"\nRol de quien pregunta: "+usuario.get("rol")+"\n\nPregunta: "+pregunta).strip();
+                if(respuesta.startsWith("[MATEMATICA]"))
+                    return Map.of("tipo","MATEMATICA","respuesta",respuesta.substring(12).strip()+"\n\nRespuesta generada con IA: revisa los pasos antes de usarla en clases o en una evaluación.","fuentes",List.of());
+                if(respuesta.startsWith("[AYUDA]"))respuesta=respuesta.substring(7).strip();
+                return respuesta.startsWith(SIN_INFORMACION)?sinRespaldo():Map.of("tipo","AYUDA","respuesta",respuesta,"fuentes",List.of(FUENTE_GUIA));
+            } catch(ModeloIA.Falla f) { /* sin IA disponible: se usan las respuestas fijas */ }
+        }
+        String fija=respuestaFija(pregunta,ia.disponible());
+        return fija==null?sinRespaldo():Map.of("tipo","AYUDA","respuesta",fija,"fuentes",List.of(FUENTE_GUIA));
+    }
+
+    /** Respuestas fijas a las preguntas más comunes sobre el asistente; funcionan aunque la IA no esté disponible. */
+    static String respuestaFija(String pregunta,boolean iaActiva) {
+        String t=BuscadorMaterial.sinTildes(pregunta).replaceAll("[¿?¡!.,]"," ").replaceAll("\\s+"," ").strip();
+        if(t.matches(".*\\b(explic|resum|lee|leer|revis|analiz)\\w*\\b.*") && t.matches(".*\\b(archivo|archivos|documento|documentos|pdf|word|docx)\\b.*"))
+            return iaActiva
+                ?"Sí. Pulsa el clip que está a la izquierda del cuadro de texto, elige un PDF, Word (DOCX), TXT o MD y te lo explico. Si buscas algo específico, escribe tu pregunta antes de adjuntarlo, por ejemplo: \"¿Qué tengo que entregar?\". El archivo no se guarda en el sistema."
+                :"Por ahora la explicación de documentos con IA no está activada. Cuando la coordinación configure la clave de Gemini, podrás adjuntar un PDF, Word, TXT o MD con el clip del asistente.";
+        if(t.matches(".*\\b(dict\\w*|voz|microfono)\\b.*"))
+            return "Sí. En los campos de texto largos y aquí en el asistente hay un botón de micrófono. Púlsalo, permite el micrófono y habla: el texto se escribe solo. Puedes decir \"coma\", \"punto y seguido\" o \"punto y aparte\". Para terminar, vuelve a pulsarlo o presiona Esc. Funciona en Chrome y Edge.";
+        if(t.matches(".*\\b(que puedes hacer|que sabes hacer|como funcionas|para que sirves|como te uso|como funciona el asistente|en que me puedes ayudar)\\b.*") || t.equals("ayuda"))
+            return "Puedo ayudarte con esto:\n• Responder preguntas con el material publicado por tus profesores, citando la fuente.\n• Decirte tus requisitos pendientes y plazos (pregunta \"¿Qué tengo pendiente?\").\n"+
+                (iaActiva?"• Explicarte un documento: pulsa el clip y adjunta un PDF, Word, TXT o MD.\n• Resolver y explicar ejercicios de matemática, o darte ideas para enseñar un contenido.\n":"")+"• También puedes dictarme con el micrófono. Para ayuda de cada página, usa el botón \"? Ayuda\".";
+        if(t.matches("(muchas )?gracias\\b.*") || t.matches("(ok|vale|perfecto) gracias\\b.*"))
+            return "¡De nada! Si necesitas algo más, aquí estoy.";
+        if(t.matches("(hola|holi|buenas|buenos dias|buenas tardes|buenas noches)\\b.*"))
+            return "¡Hola! Pregúntame por requisitos, plazos o el material publicado por tus profesores. Por ejemplo: \"¿Cuál es la asistencia mínima?\" o \"¿Qué tengo pendiente?\".";
+        return null;
+    }
+
     /** S2-19: solo usa las prácticas del propio estudiante, filtradas en el servidor. */
     private Map<String,Object> plazos() {
         var f=acceso.filtroPracticas();
@@ -178,9 +254,7 @@ public class AsistenteController {
         }
         var fragmentos=db.query(sql,(rs,n) -> new BuscadorMaterial.Fragmento(rs.getLong(1),rs.getString(2),rs.getInt(3),rs.getString(4)),args.toArray());
         var resultados=BuscadorMaterial.buscar(pregunta,fragmentos,3);
-        if(resultados.isEmpty())
-            return Map.of("tipo","SIN_RESPALDO","fuentes",List.of(),"respuesta","No encontré información suficiente en el material publicado para responder con seguridad. "+
-                "Prueba con otras palabras o consulta directamente a tu profesor.");
+        if(resultados.isEmpty())return sinFragmentos(usuario,pregunta);
         List<Map<String,Object>> fuentes=new ArrayList<>();
         for(int i=0;i<resultados.size();i++) {
             var r=resultados.get(i);
@@ -195,9 +269,9 @@ public class AsistenteController {
             contexto.append("\nPregunta: ").append(pregunta);
             try {
                 String respuesta=ia.generar(INSTRUCCIONES_MATERIAL,contexto.toString());
-                if(respuesta.startsWith(SIN_INFORMACION))
-                    return Map.of("tipo","SIN_RESPALDO","fuentes",List.of(),"respuesta",SIN_INFORMACION+" Prueba con otras palabras o consulta directamente a tu profesor.");
-                return Map.of("tipo","IA","respuesta",respuesta,"fuentes",fuentes);
+                // El material no responde la pregunta: puede ser de matemática o sobre la plataforma.
+                if(respuesta.startsWith(SIN_INFORMACION))return sinFragmentos(usuario,pregunta);
+                return Map.of("tipo","IA","respuesta",citasValidas(respuesta,fuentes.size()),"fuentes",fuentes);
             } catch(ModeloIA.Falla f) {
                 nota="\n\n("+f.getMessage()+" Te muestro los fragmentos más relevantes del material.)";
             }
