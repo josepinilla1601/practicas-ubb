@@ -124,6 +124,27 @@ kbd { display:inline-grid; place-items:center; min-width:22px; height:22px; padd
 .help-actions { display:flex; flex-wrap:wrap; gap:8px; margin:22px 0 12px; }
 @keyframes desliza { from { transform:translateX(30px); opacity:0; } }
 
+/* ---------- Dictado por voz ---------- */
+.dictado { position:relative; display:block; }
+.dictado.linea { flex:1; min-width:0; }
+.dictado.area textarea { padding-right:52px; }
+.dictado.linea input { width:100%; padding-right:44px !important; }
+.mic { position:absolute; right:8px; display:grid; place-items:center; width:34px; height:34px; border-radius:50%; border:1px solid var(--line); background:#fff; color:var(--green); }
+.dictado.area .mic { top:8px; }
+.dictado.linea .mic { top:50%; transform:translateY(-50%); width:30px; height:30px; }
+.field .dictado.linea .mic { top:calc(50% + 3px); }
+.mic:hover { background:var(--pale); border-color:#c3ddd2; }
+.mic.grabando { background:var(--red); border-color:var(--red); color:#fff; animation:pulso 1.2s ease-out infinite; }
+@keyframes pulso { 0% { box-shadow:0 0 0 0 rgba(185,67,67,.45); } 100% { box-shadow:0 0 0 10px rgba(185,67,67,0); } }
+.dictado-estado { display:block; margin-top:6px; font-size:12px; color:var(--red); font-weight:600; }
+.chat-widget-form .dictado-estado { position:absolute; left:0; bottom:calc(100% + 4px); background:#fff; padding:2px 6px; border-radius:6px; white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+
+/* ---------- Asistente con IA ---------- */
+.chat-attach { border:1px solid var(--line); background:#fff; color:var(--green); border-radius:12px; width:42px; display:grid; place-items:center; flex:none; }
+.chat-attach:hover { background:var(--pale); }
+.ai-badge { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; font-weight:700; }
+.pill .icon { vertical-align:-2px; }
+
 @media(max-width:860px) {
   .sk-grid, .stats-6 { grid-template-columns:repeat(2,1fr); }
   .toasts { top:auto; bottom:90px; right:16px; }
@@ -138,5 +159,5 @@ kbd { display:inline-grid; place-items:center; min-width:22px; height:22px; padd
   .quick kbd { display:none; }
 }
 @media(prefers-reduced-motion:reduce) {
-  .loader::after, .skeleton .sk, .spinner, .toast, .modal-backdrop, .help-panel, form.highlight { animation:none; }
+  .loader::after, .skeleton .sk, .spinner, .toast, .modal-backdrop, .help-panel, form.highlight, .mic.grabando { animation:none; }
 }

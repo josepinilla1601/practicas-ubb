@@ -186,6 +186,9 @@ const iconPaths={
   send:'<path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/>',
   close:'<path d="M6 6l12 12M18 6 6 18"/>',
   arrow:'<path d="M5 12h14M13 6l6 6-6 6"/>',
+  mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/>',
+  clip:'<path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/>',
+  spark:'<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>',
 };
 const icon=(name,size=18)=>`<svg class="icon" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[name]||''}</svg>`;
 // Tarjeta de cifra. "ayuda" explica qué cuenta la cifra (aparece al pasar el mouse o al enfocarla con el teclado).

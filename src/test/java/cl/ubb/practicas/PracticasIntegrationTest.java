@@ -312,6 +312,90 @@ class PracticasIntegrationTest {
   void publicar(long material)throws Exception{
    mvc.perform(patch("/api/materiales/"+material+"/estado").contentType("application/json").content("{\"estado\":\"PUBLICADO\"}")).andExpect(status().isOk());
   }
+  // IA simulada: las pruebas nunca llaman a Google. null = sin IA configurada; "CUPO" = cupo agotado.
+  static final java.util.concurrent.atomic.AtomicReference<String> RESPUESTA_IA=new java.util.concurrent.atomic.AtomicReference<>();
+  static volatile String contenidoEnviadoIA="";
+  @org.springframework.boot.test.context.TestConfiguration static class IASimulada {
+   @org.springframework.context.annotation.Bean @org.springframework.context.annotation.Primary ModeloIA modeloIASimulado(){
+    return new ModeloIA(){
+     public boolean disponible(){return RESPUESTA_IA.get()!=null;}
+     public String generar(String instrucciones,String contenido){
+      contenidoEnviadoIA=contenido;String r=RESPUESTA_IA.get();
+      if("CUPO".equals(r))throw new Falla("La IA alcanzó su límite de uso gratuito por ahora.",true);
+      return r;
+     }
+    };
+   }
+  }
+  @AfterEach void sinIA(){RESPUESTA_IA.set(null);contenidoEnviadoIA="";}
+  @Test void asistenteConIARedactaConFuentesYRespetaLosLimites()throws Exception{
+   long reglamento=cargarMaterial("Reglamento","reglamento.md","La asistencia mínima al centro de práctica es del 90 por ciento de las jornadas.".getBytes(StandardCharsets.UTF_8),"INI1",2026,201).get("id").asLong();
+   publicar(reglamento);
+   long p=practica("IA-1","INI1",2026);
+   cuenta("ia@test.example","ESTUDIANTE",db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,p));
+   var alumno=user("ia@test.example").roles("ESTUDIANTE");
+   mvc.perform(get("/api/asistente/estado").with(alumno)).andExpect(jsonPath("$.ia").value(false));
+   RESPUESTA_IA.set("Debes asistir al menos al 90% de las jornadas [1].");
+   mvc.perform(get("/api/asistente/estado").with(alumno)).andExpect(jsonPath("$.ia").value(true));
+   var r=preguntar(alumno,"¿Cuál es la asistencia mínima en el centro de práctica?");
+   assertEquals("IA",r.get("tipo").asText());
+   assertEquals("Debes asistir al menos al 90% de las jornadas [1].",r.get("respuesta").asText());
+   assertEquals("Reglamento",r.get("fuentes").get(0).get("titulo").asText());
+   assertTrue(contenidoEnviadoIA.contains("90 por ciento") && contenidoEnviadoIA.contains("asistencia mínima"),contenidoEnviadoIA);
+   // Si la IA dice que el material no responde, no se inventa nada.
+   RESPUESTA_IA.set(AsistenteController.SIN_INFORMACION);
+   assertEquals("SIN_RESPALDO",preguntar(alumno,"¿Cuál es la asistencia mínima en el centro de práctica?").get("tipo").asText());
+   // Sin fragmentos relacionados ni siquiera se consulta a la IA.
+   contenidoEnviadoIA="";
+   assertEquals("SIN_RESPALDO",preguntar(alumno,"¿Quién ganó el campeonato de fútbol?").get("tipo").asText());
+   assertEquals("",contenidoEnviadoIA);
+   // Con el cupo agotado responde igual, con los fragmentos y un aviso.
+   RESPUESTA_IA.set("CUPO");
+   var respaldo=preguntar(alumno,"¿Cuál es la asistencia mínima en el centro de práctica?");
+   assertEquals("MATERIAL",respaldo.get("tipo").asText());
+   assertTrue(respaldo.get("respuesta").asText().contains("90 por ciento") && respaldo.get("respuesta").asText().contains("límite"));
+  }
+  byte[] docx(String texto)throws Exception{
+   var salida=new java.io.ByteArrayOutputStream();
+   try(var zip=new java.util.zip.ZipOutputStream(salida)){
+    zip.putNextEntry(new java.util.zip.ZipEntry("word/document.xml"));
+    zip.write(("<w:document><w:body><w:p><w:r><w:t>"+texto+"</w:t></w:r></w:p></w:body></w:document>").getBytes(StandardCharsets.UTF_8));
+   }
+   return salida.toByteArray();
+  }
+  @Test void explicarDocumentoConIA()throws Exception{
+   long p=practica("IA-2","INI1",2026);
+   cuenta("explica@test.example","ESTUDIANTE",db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,p));
+   var alumno=user("explica@test.example").roles("ESTUDIANTE");
+   var guia=new MockMultipartFile("archivo","guia.txt","text/plain","La planificación debe incluir objetivo, inicio, desarrollo y cierre de la clase.".getBytes(StandardCharsets.UTF_8));
+   // Sin IA configurada responde con un mensaje claro.
+   mvc.perform(multipart("/api/asistente/explicar").file(guia).with(alumno)).andExpect(status().isServiceUnavailable());
+   RESPUESTA_IA.set("Este documento explica cómo planificar una clase.");
+   var r=json.readTree(mvc.perform(multipart("/api/asistente/explicar").file(guia).param("pregunta","¿Qué partes debe tener?").with(alumno))
+    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+   assertEquals("ARCHIVO",r.get("tipo").asText());
+   assertEquals("Este documento explica cómo planificar una clase.",r.get("respuesta").asText());
+   assertTrue(contenidoEnviadoIA.contains("objetivo, inicio, desarrollo y cierre") && contenidoEnviadoIA.contains("¿Qué partes debe tener?"));
+   var historial=json.readTree(mvc.perform(get("/api/asistente/historial").with(alumno)).andReturn().getResponse().getContentAsString());
+   assertTrue(historial.get(historial.size()-1).get("pregunta").asText().contains("guia.txt"));
+   // Word (DOCX).
+   mvc.perform(multipart("/api/asistente/explicar").file(new MockMultipartFile("archivo","informe.docx","application/octet-stream",docx("El informe de contexto describe el establecimiento y el curso asignado."))).with(alumno)).andExpect(status().isOk());
+   assertTrue(contenidoEnviadoIA.contains("describe el establecimiento"));
+   // Formato no permitido, sin archivo y material ajeno o en borrador.
+   mvc.perform(multipart("/api/asistente/explicar").file(new MockMultipartFile("archivo","virus.exe","application/octet-stream",new byte[50])).with(alumno)).andExpect(status().isBadRequest());
+   mvc.perform(multipart("/api/asistente/explicar").with(alumno)).andExpect(status().isBadRequest());
+   long propio=cargarMaterial("Guía INI1","guia.md","La práctica inicial busca conocer el funcionamiento del sistema escolar chileno.".getBytes(StandardCharsets.UTF_8),"INI1",2026,201).get("id").asLong();
+   long ajeno=cargarMaterial("Guía PRO","pro.md","La práctica profesional incluye un proyecto de intervención en el aula.".getBytes(StandardCharsets.UTF_8),"PRO",2026,201).get("id").asLong();
+   mvc.perform(multipart("/api/asistente/explicar").param("materialId",String.valueOf(propio)).with(alumno)).andExpect(status().isNotFound());
+   publicar(propio);publicar(ajeno);
+   mvc.perform(multipart("/api/asistente/explicar").param("materialId",String.valueOf(propio)).with(alumno)).andExpect(status().isOk());
+   assertTrue(contenidoEnviadoIA.contains("sistema escolar chileno"));
+   mvc.perform(multipart("/api/asistente/explicar").param("materialId",String.valueOf(ajeno)).with(alumno)).andExpect(status().isNotFound());
+   mvc.perform(get("/api/asistente/materiales").with(alumno)).andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].titulo").value("Guía INI1"));
+   // Cupo agotado.
+   RESPUESTA_IA.set("CUPO");
+   mvc.perform(multipart("/api/asistente/explicar").file(guia).with(alumno)).andExpect(status().isTooManyRequests());
+  }
   @Test void s218AsistenteRespondeConFuentesYSoloMaterialPermitido()throws Exception{
    long reglamento=cargarMaterial("Reglamento de práctica","reglamento.md",("La asistencia mínima al centro de práctica es del 90 por ciento.\n\n"+
     "Las inasistencias se justifican con el profesor guía dentro de 48 horas.").getBytes(StandardCharsets.UTF_8),"INI1",2026,201).get("id").asLong();
