@@ -11,6 +11,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -314,20 +315,24 @@ class PracticasIntegrationTest {
   }
   // IA simulada: las pruebas nunca llaman a Google. null = sin IA configurada; "CUPO" = cupo agotado.
   static final java.util.concurrent.atomic.AtomicReference<String> RESPUESTA_IA=new java.util.concurrent.atomic.AtomicReference<>();
-  static volatile String contenidoEnviadoIA="";
+  static volatile String contenidoEnviadoIA="",instruccionesIA="";
+  static final java.util.concurrent.atomic.AtomicReference<List<ModeloIA.FuenteWeb>> WEB_IA=new java.util.concurrent.atomic.AtomicReference<>(List.of());
   @org.springframework.boot.test.context.TestConfiguration static class IASimulada {
    @org.springframework.context.annotation.Bean @org.springframework.context.annotation.Primary ModeloIA modeloIASimulado(){
     return new ModeloIA(){
      public boolean disponible(){return RESPUESTA_IA.get()!=null;}
      public String generar(String instrucciones,String contenido){
-      contenidoEnviadoIA=contenido;String r=RESPUESTA_IA.get();
+      contenidoEnviadoIA=contenido;instruccionesIA=instrucciones;String r=RESPUESTA_IA.get();
       if("CUPO".equals(r))throw new Falla("La IA alcanzó su límite de uso gratuito por ahora.",true);
       return r;
+     }
+     public Resultado generarConInternet(String instrucciones,String contenido){
+      return new Resultado(generar(instrucciones,contenido),WEB_IA.get());
      }
     };
    }
   }
-  @AfterEach void sinIA(){RESPUESTA_IA.set(null);contenidoEnviadoIA="";}
+  @AfterEach void sinIA(){RESPUESTA_IA.set(null);WEB_IA.set(List.of());contenidoEnviadoIA="";instruccionesIA="";}
   @Test void asistenteConIARedactaConFuentesYRespetaLosLimites()throws Exception{
    long reglamento=cargarMaterial("Reglamento","reglamento.md","La asistencia mínima al centro de práctica es del 90 por ciento de las jornadas.".getBytes(StandardCharsets.UTF_8),"INI1",2026,201).get("id").asLong();
    publicar(reglamento);
@@ -382,6 +387,29 @@ class PracticasIntegrationTest {
    assertTrue(mate.get("respuesta").asText().contains("revisa los pasos"));
    RESPUESTA_IA.set("[AYUDA] Usa el botón Ayuda.");
    assertEquals("Usa el botón Ayuda.",preguntar(alumno,"¿Dónde encuentro ayuda?").get("respuesta").asText());
+   // Preguntas que no tienen relación con la práctica: no se responden.
+   RESPUESTA_IA.set("[FUERA_DE_TEMA]");
+   var fuera=preguntar(alumno,"¿Quién ganó el campeonato de fútbol?");
+   assertEquals("FUERA_DE_TEMA",fuera.get("tipo").asText());
+   assertTrue(fuera.get("respuesta").asText().contains("Solo puedo ayudarte con temas de tu práctica"));
+   // Apoyo pedagógico con información de internet: se marca y se citan las páginas.
+   RESPUESTA_IA.set("[PRACTICA] Planifica con inicio, desarrollo y cierre.\nInformación complementada desde internet: el MBE tiene cuatro dominios (Mineduc).");
+   WEB_IA.set(List.of(new ModeloIA.FuenteWeb("mineduc.cl","https://www.mineduc.cl/mbe")));
+   var practica=preguntar(alumno,"¿Cómo planifico una buena clase?");
+   assertEquals("PRACTICA",practica.get("tipo").asText());
+   assertTrue(practica.get("respuesta").asText().contains("Fuentes de internet:\n• mineduc.cl"));
+   assertEquals("https://www.mineduc.cl/mbe",practica.get("fuentes").get(0).get("url").asText());
+  }
+  @Test void loQueNoVieneDelDocumentoSeMarca(){
+   var web=List.of(new ModeloIA.FuenteWeb("mineduc.cl","https://www.mineduc.cl"));
+   // Sin internet ni apartado: el texto queda igual (solo se basa en el documento).
+   assertEquals("Fortalezas: • Buen inicio.",AsistenteController.marcarInternet("Fortalezas: • Buen inicio.",List.of()));
+   // La IA agregó información sin buscar en internet: se avisa que no tiene fuente verificada.
+   assertTrue(AsistenteController.marcarInternet("Fortalezas: • Bien.\nInformación complementada desde internet: dato.",List.of())
+    .contains(AsistenteController.APARTADO_SIN_FUENTE+" dato."));
+   // Buscó en internet pero no separó el apartado: se agrega el aviso y las fuentes.
+   String r=AsistenteController.marcarInternet("Fortalezas: • Bien.",web);
+   assertTrue(r.contains("se complementó con información de internet") && r.endsWith("Fuentes de internet:\n• mineduc.cl"));
   }
   @Test void citasAFuentesInexistentesSeEliminan(){
    assertEquals("Dato [1] y otro dato.",AsistenteController.citasValidas("Dato [1] y otro dato [4].",1));
@@ -466,28 +494,44 @@ class PracticasIntegrationTest {
    var guia=new MockMultipartFile("archivo","guia.txt","text/plain","La planificación debe incluir objetivo, inicio, desarrollo y cierre de la clase.".getBytes(StandardCharsets.UTF_8));
    // Sin IA configurada responde con un mensaje claro.
    mvc.perform(multipart("/api/asistente/explicar").file(guia).with(alumno)).andExpect(status().isServiceUnavailable());
-   RESPUESTA_IA.set("Este documento explica cómo planificar una clase.");
-   var r=json.readTree(mvc.perform(multipart("/api/asistente/explicar").file(guia).param("pregunta","¿Qué partes debe tener?").with(alumno))
+   // Etapa 1: preguntas de reflexión, sin retroalimentación todavía.
+   RESPUESTA_IA.set("Es una planificación de clase.\n1. ¿Qué querías lograr?\n2. ¿Por qué elegiste ese inicio?\n3. ¿Qué cambiarías?");
+   var r=json.readTree(mvc.perform(multipart("/api/asistente/explicar").file(guia).param("pregunta","¿Está completa?").with(alumno))
+    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+   assertEquals("REFLEXION",r.get("tipo").asText());
+   assertTrue(r.get("respuesta").asText().contains("1. ¿Qué querías lograr?"));
+   assertTrue(instruccionesIA.contains("TODAVÍA NO des retroalimentación"));
+   assertTrue(contenidoEnviadoIA.contains("objetivo, inicio, desarrollo y cierre") && contenidoEnviadoIA.contains("¿Está completa?"));
+   // Etapa 2: la retroalimentación considera las respuestas del estudiante; sin internet no aparece el aviso.
+   RESPUESTA_IA.set("Sobre tus reflexiones: bien pensado.\nFortalezas:\n• Incluye las tres etapas.");
+   r=json.readTree(mvc.perform(multipart("/api/asistente/explicar").file(guia).param("etapa","RETROALIMENTACION").param("respuestas","Quería que comprendieran fracciones.").with(alumno))
     .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
    assertEquals("ARCHIVO",r.get("tipo").asText());
-   assertEquals("Este documento explica cómo planificar una clase.",r.get("respuesta").asText());
-   assertTrue(contenidoEnviadoIA.contains("objetivo, inicio, desarrollo y cierre") && contenidoEnviadoIA.contains("¿Qué partes debe tener?"));
+   assertEquals("Sobre tus reflexiones: bien pensado.\nFortalezas:\n• Incluye las tres etapas.",r.get("respuesta").asText());
+   assertTrue(contenidoEnviadoIA.contains("Quería que comprendieran fracciones."));
+   assertEquals(1,r.get("fuentes").size());
    var historial=json.readTree(mvc.perform(get("/api/asistente/historial").with(alumno)).andReturn().getResponse().getContentAsString());
-   assertTrue(historial.get(historial.size()-1).get("pregunta").asText().contains("guia.txt"));
+   assertTrue(historial.get(historial.size()-1).get("pregunta").asText().contains("guia.txt · Mis reflexiones"));
+   // Con información de internet: se separa y se citan las páginas.
+   RESPUESTA_IA.set("Fortalezas:\n• Bien.\nInformación complementada desde internet: las Bases Curriculares piden… (Mineduc)");
+   WEB_IA.set(List.of(new ModeloIA.FuenteWeb("curriculumnacional.cl","https://www.curriculumnacional.cl")));
+   r=json.readTree(mvc.perform(multipart("/api/asistente/explicar").file(guia).param("etapa","RETROALIMENTACION").with(alumno))
+    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+   assertTrue(r.get("respuesta").asText().contains("Fuentes de internet:\n• curriculumnacional.cl"));
+   assertEquals("WEB",r.get("fuentes").get(1).get("tipo").asText());
+   assertTrue(contenidoEnviadoIA.contains("prefirió no responderlas"));
+   WEB_IA.set(List.of());
+   // Un documento sin relación con la práctica no se revisa.
+   RESPUESTA_IA.set("[FUERA_DE_TEMA]");
+   mvc.perform(multipart("/api/asistente/explicar").file(guia).with(alumno)).andExpect(status().isOk()).andExpect(jsonPath("$.tipo").value("FUERA_DE_TEMA"));
+   RESPUESTA_IA.set("Es un informe.\n1. ¿?\n2. ¿?\n3. ¿?");
    // Word (DOCX).
    mvc.perform(multipart("/api/asistente/explicar").file(new MockMultipartFile("archivo","informe.docx","application/octet-stream",docx("El informe de contexto describe el establecimiento y el curso asignado."))).with(alumno)).andExpect(status().isOk());
    assertTrue(contenidoEnviadoIA.contains("describe el establecimiento"));
-   // Formato no permitido, sin archivo y material ajeno o en borrador.
+   // Formato no permitido, sin archivo o etapa inválida.
    mvc.perform(multipart("/api/asistente/explicar").file(new MockMultipartFile("archivo","virus.exe","application/octet-stream",new byte[50])).with(alumno)).andExpect(status().isBadRequest());
    mvc.perform(multipart("/api/asistente/explicar").with(alumno)).andExpect(status().isBadRequest());
-   long propio=cargarMaterial("Guía INI1","guia.md","La práctica inicial busca conocer el funcionamiento del sistema escolar chileno.".getBytes(StandardCharsets.UTF_8),"INI1",2026,201).get("id").asLong();
-   long ajeno=cargarMaterial("Guía PRO","pro.md","La práctica profesional incluye un proyecto de intervención en el aula.".getBytes(StandardCharsets.UTF_8),"PRO",2026,201).get("id").asLong();
-   mvc.perform(multipart("/api/asistente/explicar").param("materialId",String.valueOf(propio)).with(alumno)).andExpect(status().isNotFound());
-   publicar(propio);publicar(ajeno);
-   mvc.perform(multipart("/api/asistente/explicar").param("materialId",String.valueOf(propio)).with(alumno)).andExpect(status().isOk());
-   assertTrue(contenidoEnviadoIA.contains("sistema escolar chileno"));
-   mvc.perform(multipart("/api/asistente/explicar").param("materialId",String.valueOf(ajeno)).with(alumno)).andExpect(status().isNotFound());
-   mvc.perform(get("/api/asistente/materiales").with(alumno)).andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].titulo").value("Guía INI1"));
+   mvc.perform(multipart("/api/asistente/explicar").file(guia).param("etapa","OTRA").with(alumno)).andExpect(status().isBadRequest());
    // Cupo agotado.
    RESPUESTA_IA.set("CUPO");
    mvc.perform(multipart("/api/asistente/explicar").file(guia).with(alumno)).andExpect(status().isTooManyRequests());

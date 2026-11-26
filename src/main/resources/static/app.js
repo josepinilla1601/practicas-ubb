@@ -286,9 +286,18 @@ let navigation=0;
 // Se ejecutan después de dibujar cada página (buscador en tablas, leyenda de obligatorios, etc.).
 const pageHooks=[];
 const skeleton=()=>`<div class="skeleton" aria-hidden="true"><div class="sk sk-title"></div><div class="sk sk-line"></div><div class="sk-grid"><div class="sk sk-box"></div><div class="sk sk-box"></div><div class="sk sk-box"></div><div class="sk sk-box"></div></div><div class="sk sk-card"></div></div><p class="sr-only">Cargando la página…</p>`;
-async function go(page,id) {
+// Navegación: cada página queda en el historial del navegador, así la flecha "atrás" vuelve a donde venías.
+// Al abrir una práctica se recuerda la página de origen para que "Volver" regrese allí (calendario, avisos, panel…).
+async function go(page,id,{historial=false}={}) {
   const target=pages[page];if(!target || !role(...target.roles))return;
-  const turn=++navigation;state.page=page;clearErrors();
+  const desde=state.page,desdeId=state.pageId;
+  if(page==='detalle' && desde && desde!=='detalle')state.detalleOrigen=desde;
+  if(!historial) {
+    const entrada={page,id:id??null};
+    if(!history.state || (desde===page && String(desdeId??'')===String(id??'')))history.replaceState(entrada,'');
+    else history.pushState(entrada,'');
+  }
+  const turn=++navigation;state.page=page;state.pageId=id;clearErrors();
   const espera=setTimeout(()=>{if(turn===navigation)$('#app').innerHTML=skeleton();},150);
   try {
     const html=await target.render(id);if(turn!==navigation || !state.usuario)return;
@@ -408,11 +417,24 @@ registerPage('detalle','',allRoles,async id=>{
   // Números junto a cada pestaña para saber dónde hay algo pendiente.
   const pendientes={entregas:role('ESTUDIANTE')?data.requisitos.filter(r=>r.estado==='PENDIENTE' || r.estado==='OBSERVADO').length:role('COORDINADOR','PROFESOR_UBB')?data.documentos.filter(d=>d.ultima && !d.decision).length:0};
   const tabs=pestanasDetalle.filter(([k])=>panel[k].trim()).map(([k,l,i])=>`<button type="button" role="tab" id="tab-${k}" data-tab="${k}" aria-controls="panel-${k}" aria-selected="false" tabindex="-1">${icon(i,16)}<span>${l}</span>${pendientes[k]?`<b class="tab-badge" title="Pendientes">${pendientes[k]}</b>`:''}</button>`).join('');
-  return button('← Volver a prácticas','data-page="practicas"',true)+heading(p.estudiante,`${p.asignatura} · ${p.anio}-${p.semestre}`,progress(p))+
+  // Solo páginas del menú (las que necesitan un identificador, como la vista previa, vuelven a Prácticas).
+  const origen=pages[state.detalleOrigen]?.label && role(...pages[state.detalleOrigen].roles)?state.detalleOrigen:'practicas';
+  // Recuadro de estado: verde si todo está aprobado, rojo si hay plazos vencidos, amarillo si está en proceso.
+  const pendiente=r=>r.estado==='PENDIENTE' || r.estado==='OBSERVADO';
+  const vencidos=data.requisitos.filter(r=>r.vencido && pendiente(r)).length;
+  const [claseEstado,textoEstado]=vencidos?['vencido',`${vencidos===1?'1 requisito vencido':`${vencidos} requisitos vencidos`}`]
+    :data.requisitos.length && data.requisitos.every(r=>r.estado==='APROBADO')?['al-dia','Todo aprobado']
+    :['en-proceso',data.requisitos.length?'En proceso':'Sin requisitos definidos'];
+  return button('← Volver',`data-page="${origen}" title="Volver a ${e(pages[origen].label)}"`,true)+
+    `<div class="heading detalle-heading"><div><h1>${e(p.estudiante)}</h1></div></div>`+
+    `<div class="estado-practica ${claseEstado}"><span class="eyebrow">FORMACIÓN PRÁCTICA</span><strong class="estado-texto">${textoEstado}</strong><span class="estado-avance">${progress(p)}</span></div>`+
     `<div class="meta"><div>Centro<strong>${e(p.centro||'No corresponde')}</strong></div><div>Profesor responsable<strong>${e(p.profesor_responsable)}</strong></div></div>`+
     `<div class="tabs" role="tablist" aria-label="Secciones de la práctica">${tabs}</div>`+
     pestanasDetalle.filter(([k])=>panel[k].trim()).map(([k])=>`<div role="tabpanel" id="panel-${k}" data-tab="${k}" aria-labelledby="tab-${k}" hidden>${panel[k]}</div>`).join('');
 },id=>{
+  // Asignatura y período junto a "Seguimiento individual", en la barra superior.
+  const pr=state.detail?.practica;
+  if(pr)$('#breadcrumb').innerHTML=`Seguimiento individual <small class="crumb-extra">· ${e(pr.asignatura)} ${e(pr.anio)}-${e(pr.semestre)}</small>`;
   mostrarPestana(state.detalleTab||pestanaInicial());
   onForm('#upload-form',async form=>{
     const file=form.elements.archivo.files[0];
@@ -464,6 +486,11 @@ document.addEventListener('click',async event=>{
     else if(target.dataset.action && actions[target.dataset.action]){target.disabled=true;await actions[target.dataset.action](target);}
     else if(target.id==='logout'){await api('/logout',{method:'POST'});state.usuario=null;await refreshSession();renderLogin();notice('Cerraste sesión correctamente.');}
   } catch(err) {notice(err.message,true);} finally {target.disabled=false;}
+});
+// Flechas atrás y adelante del navegador (o del mouse): se vuelve a la página anterior dentro del sistema.
+window.addEventListener('popstate',async event=>{
+  if(!state.usuario || !event.state?.page)return;
+  try { await go(event.state.page,event.state.id??undefined,{historial:true}); } catch(err) { notice(err.message,true); }
 });
 document.addEventListener('DOMContentLoaded',async()=>{
   try {await refreshSession();if(!state.usuario){renderLogin();return;}await load();await go(homePage());}
