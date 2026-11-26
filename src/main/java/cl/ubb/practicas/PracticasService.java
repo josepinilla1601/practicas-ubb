@@ -53,7 +53,7 @@ public class PracticasService {
     private static final String PRACTICAS="""
         SELECT p.id,p.estudiante_id,p.asignatura_id,p.centro_id,p.profesor_responsable,p.profesor_ubb_id,p.profesor_colegio_id,
           e.identificador,CONCAT(e.nombres,' ',e.apellidos) estudiante,
-          a.nombre asignatura,a.ciclo,a.requiere_centro,c.nombre centro,pe.anio,pe.semestre,
+          a.nombre asignatura,a.ciclo,a.requiere_centro,c.nombre centro,pe.anio,pe.semestre,pe.estado periodo_estado,
           (SELECT COUNT(*) FROM requisitos_practica r WHERE r.practica_id=p.id) requeridos,
           (SELECT COUNT(*) FROM requisitos_practica r WHERE r.practica_id=p.id
            AND EXISTS(SELECT 1 FROM documentos d WHERE d.requisito_id=r.id)) recibidos
@@ -61,9 +61,11 @@ public class PracticasService {
         JOIN asignaturas a ON a.id=p.asignatura_id JOIN periodos pe ON pe.id=p.periodo_id
         LEFT JOIN centros c ON c.id=p.centro_id
         """;
-    public List<Map<String,Object>> practicas() { var f=acceso.filtroPracticas();return db.queryForList(PRACTICAS+" WHERE "+f.sql()+" ORDER BY p.id DESC",f.args()); }
+    public List<Map<String,Object>> practicas() { var f=acceso.filtroListado();return db.queryForList(PRACTICAS+" WHERE "+f.sql()+" ORDER BY p.id DESC",f.args()); }
+    /** Todas las prácticas autorizadas, sin importar el período elegido (avisos y asistente). */
+    public List<Map<String,Object>> practicasTodas() { var f=acceso.filtroPracticas();return db.queryForList(PRACTICAS+" WHERE "+f.sql()+" ORDER BY p.id DESC",f.args()); }
     public List<Map<String,Object>> buscarPracticas(String busqueda,Long asignaturaId,Integer anio,Integer semestre) {
-        var f=acceso.filtroPracticas();StringBuilder sql=new StringBuilder(PRACTICAS+" WHERE "+f.sql());
+        var f=acceso.filtroListado();StringBuilder sql=new StringBuilder(PRACTICAS+" WHERE "+f.sql());
         var args=new ArrayList<>(Arrays.asList(f.args()));
         if(busqueda!=null && !busqueda.isBlank()) {
             if(busqueda.length()>150)throw Problema.invalido("La búsqueda admite hasta 150 caracteres.");
@@ -81,11 +83,10 @@ public class PracticasService {
         acceso.exigir("COORDINADOR");
         estudiante(s.estudianteId());
         var asignatura=uno("SELECT * FROM asignaturas WHERE id=?","La asignatura no existe.",s.asignaturaId());
-        boolean necesita=Boolean.TRUE.equals(asignatura.get("requiere_centro")) || "1".equals(String.valueOf(asignatura.get("requiere_centro")));
-        if(necesita && s.centroId()==null)throw Problema.invalido("Esta asignatura requiere un centro de práctica.");
+        // Si la asignatura requiere centro y no se indica, la práctica queda "por asignar": el estudiante marca sus
+        // preferencias y la coordinación asigna según los cupos (CuposController).
         if(s.centroId()!=null)centro(s.centroId());
-        db.update("INSERT IGNORE INTO periodos(anio,semestre) VALUES(?,?)",s.anio(),s.semestre());
-        long periodo=db.queryForObject("SELECT id FROM periodos WHERE anio=? AND semestre=?",Long.class,s.anio(),s.semestre());
+        long periodo=acceso.asegurarPeriodo(s.anio(),s.semestre());
         long id=insert("INSERT INTO practicas(estudiante_id,asignatura_id,periodo_id,centro_id,profesor_responsable) VALUES(?,?,?,?,?)",s.estudianteId(),s.asignaturaId(),periodo,s.centroId(),clean(s.profesorResponsable()));
         db.update("INSERT INTO requisitos_practica(practica_id,codigo,nombre,fecha_limite) SELECT ?,codigo,nombre,fecha_limite FROM requisitos_plantilla WHERE asignatura_id=? AND periodo_id=?",id,s.asignaturaId(),periodo);
         return practica(id);
@@ -94,6 +95,7 @@ public class PracticasService {
     public List<Map<String,Object>> requisitos(String filtro,Object... args) {
         var requisitos=db.queryForList("""
             SELECT r.id,r.practica_id,r.codigo,r.nombre,r.fecha_limite,
+             (SELECT pr.estado FROM periodos pr WHERE pr.id=p.periodo_id) periodo_estado,
              (SELECT COUNT(*) FROM documentos d WHERE d.requisito_id=r.id) archivos,
              (SELECT rv.decision FROM documentos d LEFT JOIN revisiones rv ON rv.documento_id=d.id
               WHERE d.requisito_id=r.id ORDER BY d.id DESC LIMIT 1) decision
@@ -102,7 +104,8 @@ public class PracticasService {
         for(var r:requisitos) {
             String estado=ReglasSeguimiento.estado(((Number)r.get("archivos")).longValue(),(String)r.get("decision"));
             r.put("estado",estado);
-            r.put("vencido",ReglasSeguimiento.vencido(ReglasSeguimiento.fecha(r.get("fecha_limite")),ReglasSeguimiento.pendiente(estado),hoy));
+            // Solo el período actual tiene plazos vencidos: el historial es un registro, no tiene pendientes.
+            r.put("vencido","ACTUAL".equals(r.get("periodo_estado")) && ReglasSeguimiento.vencido(ReglasSeguimiento.fecha(r.get("fecha_limite")),ReglasSeguimiento.pendiente(estado),hoy));
         }
         return requisitos;
     }
@@ -154,8 +157,9 @@ public class PracticasService {
         if(rows.isEmpty())throw Problema.noExiste("El documento no existe.");return rows.get(0);
     }
     public Map<String,Object> resumen() {
-        if(!"COORDINADOR".equals(acceso.rol())) {
-            var f=acceso.filtroPracticas();
+        // Con un período elegido, también la coordinación ve las cifras de ese período.
+        if(!"COORDINADOR".equals(acceso.rol()) || acceso.periodoSolicitado()!=null) {
+            var f=acceso.filtroListado();
             var r=db.queryForMap("SELECT COUNT(*) practicas,COUNT(DISTINCT p.estudiante_id) estudiantes,COUNT(DISTINCT p.centro_id) centros FROM practicas p WHERE "+f.sql(),f.args());
             r.put("documentos",db.queryForObject("SELECT COUNT(*) FROM documentos d JOIN requisitos_practica r ON r.id=d.requisito_id JOIN practicas p ON p.id=r.practica_id WHERE "+f.sql(),Long.class,f.args()));return r;
         }

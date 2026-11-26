@@ -36,8 +36,10 @@ class Sprint3IntegrationTest {
 
     @BeforeEach void preparar() throws Exception {
         assertTrue(db.queryForObject("SELECT DATABASE()",String.class).endsWith("_test"));
-        for(String t:new String[]{"rubricas_colegio","fichas_inscripcion","bitacora_jornadas","calificaciones","asistente_mensajes","material_fragmentos","materiales","evaluaciones_colegio","revisiones","documentos","requisitos_practica","practicas","usuarios","estudiantes","centros"})db.update("DELETE FROM "+t);
+        for(String t:new String[]{"preferencias_centro","cupos_centro","rubricas_colegio","fichas_inscripcion","bitacora_jornadas","calificaciones","asistente_mensajes","material_fragmentos","materiales","evaluaciones_colegio","revisiones","documentos","requisitos_practica","practicas","usuarios","estudiantes","centros"})db.update("DELETE FROM "+t);
         db.update("INSERT INTO usuarios(correo,nombre,clave_hash,rol) VALUES('coordinacion@test.example','Coordinación','no-utilizada','COORDINADOR')");
+        // Las prácticas de prueba se registran en 2026-2: ese es el período actual.
+        db.update("INSERT IGNORE INTO periodos(anio,semestre) VALUES(2026,2)");db.update("UPDATE periodos SET estado=IF(anio=2026 AND semestre=2,'ACTUAL','HISTORICO')");
         mvc=MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).defaultRequest(get("/").with(csrf())).build();
         long centro=crear("/centros",Map.of("nombre","Liceo de prueba","comuna","Chillán","direccion","Calle 123","contacto","Directora"),201).get("id").asLong();
         estudiante=crear("/estudiantes",Map.of("identificador","S3-1","nombres","Ana","apellidos","Rojas Pérez","correo","ana@test.example"),201).get("id").asLong();

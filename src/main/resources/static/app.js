@@ -24,6 +24,8 @@ async function api(path, options={}) {
   const headers = {...options.headers};
   if(options.body && !(options.body instanceof FormData) && !(options.body instanceof URLSearchParams)) headers['Content-Type']='application/json';
   if(options.method && !['GET','HEAD'].includes(options.method)) headers[state.csrfHeader]=state.csrf;
+  // Período elegido en el selector del encabezado: el servidor limita las listas a ese año y semestre.
+  if(state.periodo) headers['X-Periodo']=state.periodo;
   setLoading(1);
   let response;
   try { response = await fetch('api'+path, {...options, headers}); }
@@ -215,14 +217,14 @@ const iconPaths={
 const icon=(name,size=18)=>`<svg class="icon" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[name]||''}</svg>`;
 // Tarjeta de cifra. "ayuda" explica qué cuenta la cifra (aparece al pasar el mouse o al enfocarla con el teclado).
 const statTile=(iconName,value,label,ayuda='')=>`<div class="stat" ${ayuda?`tabindex="0" data-tip="${e(ayuda)}" aria-label="${e(`${value||0} ${label}. ${ayuda}`)}"`:''}>${icon(iconName,20)}<div class="number">${value||0}</div><div class="label">${e(label)}${ayuda?` <span class="tip-mark" aria-hidden="true">?</span>`:''}</div></div>`;
-const pageIcons={mipanel:'home',resumen:'home',indicadores:'chart',calendario:'calendar',practicas:'clipboard',bitacora:'notebook',estudiantes:'users',centros:'school',plantillas:'list',materiales:'book',asistente:'chat',usuarios:'shield'};
+const pageIcons={mipanel:'home',resumen:'home',indicadores:'chart',calendario:'calendar',practicas:'clipboard',bitacora:'notebook',estudiantes:'users',centros:'school',asignacion:'school',plantillas:'list',materiales:'book',asistente:'chat',usuarios:'shield'};
 // Se ejecutan al iniciar o cerrar sesión y en cada cambio de página (por ejemplo, el asistente flotante).
 const sessionHooks=[];
 const runSessionHooks=()=>sessionHooks.forEach(hook=>{try{hook();}catch(err){console.error(err);}});
 // Secciones del menú lateral. Las páginas de la cuenta personal van en el menú de perfil, no aquí.
 const navGroups=[
   ['Inicio',['mipanel','resumen','indicadores','calendario']],
-  ['Gestión académica',['practicas','bitacora','estudiantes','centros','plantillas']],
+  ['Gestión académica',['practicas','bitacora','estudiantes','centros','asignacion','plantillas']],
   ['Apoyo docente',['materiales','asistente']],
   ['Administración',['usuarios']],
 ];
@@ -277,6 +279,7 @@ function toggleProfileMenu() {
 }
 async function refreshSession() { Object.assign(state,await api('/sesion')); }
 async function load() {
+  await cargarPeriodos();
   const [asignaturas,practicas,resumen]=await Promise.all(['/asignaturas','/practicas','/resumen'].map(apiPath=>api(apiPath)));
   Object.assign(state,{asignaturas,practicas,resumen});
   if(coord()) [state.estudiantes,state.centros]=await Promise.all([api('/estudiantes'),api('/centros')]);
@@ -361,7 +364,7 @@ function avanceDocs(p) {
 }
 function practicesTable(items) {
   if(!items.length)return empty('No hay prácticas para mostrar','Revisa los filtros o las asignaciones.');
-  return `<div class="scroll"><table><thead><tr><th>ESTUDIANTE</th><th>ASIGNATURA / PERÍODO</th><th>DOCUMENTACIÓN</th><th>DETALLE</th></tr></thead><tbody>${items.map(p=>`<tr data-estado="${avanceDocs(p)}"><td><strong>${e(p.estudiante)}</strong><small>${e(p.identificador)}</small></td><td>${e(p.asignatura)}<small>${p.anio}-${p.semestre} · ${e(p.centro||'Actividad universitaria')}</small></td><td data-sort="${Number(p.requeridos)?Number(p.recibidos)/Number(p.requeridos):-1}">${progress(p)}</td><td>${button('Ver seguimiento',`data-detail="${p.id}"`,true)}</td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="scroll"><table><thead><tr><th>ESTUDIANTE</th><th>ASIGNATURA / PERÍODO</th><th>DOCUMENTACIÓN</th><th>DETALLE</th></tr></thead><tbody>${items.map(p=>`<tr data-estado="${avanceDocs(p)}"><td><strong>${e(p.estudiante)}</strong><small>${e(p.identificador)}</small></td><td>${e(p.asignatura)}${p.periodo_estado==='HISTORICO'?' <span class="pill historica">Historial</span>':''}<small>${p.anio}-${p.semestre} · ${e(p.centro||(p.requiere_centro?'Centro por asignar':'Actividad universitaria'))}</small></td><td data-sort="${Number(p.requeridos)?Number(p.recibidos)/Number(p.requeridos):-1}">${progress(p)}</td><td>${button('Ver seguimiento',`data-detail="${p.id}"`,true)}</td></tr>`).join('')}</tbody></table></div>`;
 }
 const allRoles=['COORDINADOR','PROFESOR_UBB','PROFESOR_COLEGIO','ESTUDIANTE'];
 registerPage('resumen','Vista general',allRoles,()=>heading('Una mirada a tus prácticas','Información visible según tu cuenta y tus asignaciones.')+
@@ -378,8 +381,14 @@ registerPage('centros','Centros de práctica',['COORDINADOR'],()=>heading('Centr
 function practiceForm() { return card('Registrar práctica',`<form id="practice-form">${selectField('Estudiante','estudianteId',options(state.estudiantes,x=>`${x.nombres} ${x.apellidos}`))}${selectField('Asignatura','asignaturaId',options(state.asignaturas,x=>x.nombre))}${selectField('Centro','centroId',options(state.centros,x=>x.nombre),false)}<p id="center-hint" class="hint"></p><div class="row">${field('Año','anio','number',true,4,new Date().getFullYear())}${selectField('Semestre','semestre',[[1,'Primero'],[2,'Segundo']],true,2)}</div>${field('Profesor responsable (referencia)','profesorResponsable')}${button('Registrar práctica','type="submit"')}<p class="hint">El nombre de referencia no concede acceso: asigna la cuenta docente desde el seguimiento.</p></form>`); }
 function bindPracticeForm() {
   const form=$('#practice-form');if(!form)return;
-  const update=()=>{const a=state.asignaturas.find(x=>Number(x.id)===Number(form.elements.asignaturaId.value));form.elements.centroId.required=!!a?.requiere_centro;$('#center-hint').textContent=a?.requiere_centro?'Esta asignatura requiere un centro.':'El centro es opcional para esta asignatura.';};
+  const update=()=>{const a=state.asignaturas.find(x=>Number(x.id)===Number(form.elements.asignaturaId.value));form.elements.centroId.required=false;$('#center-hint').textContent=a?.requiere_centro?'Esta asignatura se realiza en un centro. Si lo dejas vacío, queda por asignar: el estudiante marca sus preferencias y lo asignas en "Asignación de centros".':'El centro es opcional para esta asignatura.';};
   form.elements.asignaturaId.addEventListener('change',update);update();
+  // Aviso si la práctica se registra fuera del período actual: queda como historial.
+  const actual=(state.periodos||[]).find(p=>p.estado==='ACTUAL');
+  const avisoPeriodo=()=>{let h=$('#periodo-hint');if(!h){form.elements.semestre.closest('.row').insertAdjacentHTML('afterend','<p id="periodo-hint" class="hint"></p>');h=$('#periodo-hint');}
+    const elegido=`${form.elements.anio.value}-${form.elements.semestre.value}`;
+    h.textContent=!actual?'':elegido===`${actual.anio}-${actual.semestre}`?`Período actual (${elegido}).`:`${elegido} no es el período actual (${actual.anio}-${actual.semestre}): la práctica quedará como historial, sin plazos ni avisos, y solo la verá la coordinación.`;};
+  form.elements.anio.addEventListener('input',avisoPeriodo);form.elements.semestre.addEventListener('change',avisoPeriodo);avisoPeriodo();
   onForm('#practice-form',async f=>{const d=formData(f);for(const k of ['estudianteId','asignaturaId','anio','semestre'])d[k]=Number(d[k]);d.centroId=d.centroId?Number(d.centroId):null;const p=await send('/practicas',d);await saved('detalle',p.id);});
 }
 registerPage('practicas','Prácticas y documentos',allRoles,()=>heading('Prácticas y documentos','Consulta las prácticas que tienes autorizadas.')+
@@ -422,13 +431,13 @@ registerPage('detalle','',allRoles,async id=>{
   // Recuadro de estado: verde si todo está aprobado, rojo si hay plazos vencidos, amarillo si está en proceso.
   const pendiente=r=>r.estado==='PENDIENTE' || r.estado==='OBSERVADO';
   const vencidos=data.requisitos.filter(r=>r.vencido && pendiente(r)).length;
-  const [claseEstado,textoEstado]=vencidos?['vencido',`${vencidos===1?'1 requisito vencido':`${vencidos} requisitos vencidos`}`]
+  const [claseEstado,textoEstado]=p.periodo_estado==='HISTORICO'?['historica','Registro histórico · sin plazos ni avisos']:vencidos?['vencido',`${vencidos===1?'1 requisito vencido':`${vencidos} requisitos vencidos`}`]
     :data.requisitos.length && data.requisitos.every(r=>r.estado==='APROBADO')?['al-dia','Todo aprobado']
     :['en-proceso',data.requisitos.length?'En proceso':'Sin requisitos definidos'];
   return button('← Volver',`data-page="${origen}" title="Volver a ${e(pages[origen].label)}"`,true)+
     `<div class="heading detalle-heading"><div><h1>${e(p.estudiante)}</h1></div></div>`+
     `<div class="estado-practica ${claseEstado}"><span class="eyebrow">FORMACIÓN PRÁCTICA</span><strong class="estado-texto">${textoEstado}</strong><span class="estado-avance">${progress(p)}</span></div>`+
-    `<div class="meta"><div>Centro<strong>${e(p.centro||'No corresponde')}</strong></div><div>Profesor responsable<strong>${e(p.profesor_responsable)}</strong></div></div>`+
+    `<div class="meta"><div>Centro<strong>${e(p.centro||(p.requiere_centro?'Por asignar':'No corresponde'))}</strong></div><div>Profesor responsable<strong>${e(p.profesor_responsable)}</strong></div></div>`+
     `<div class="tabs" role="tablist" aria-label="Secciones de la práctica">${tabs}</div>`+
     pestanasDetalle.filter(([k])=>panel[k].trim()).map(([k])=>`<div role="tabpanel" id="panel-${k}" data-tab="${k}" aria-labelledby="tab-${k}" hidden>${panel[k]}</div>`).join('');
 },id=>{

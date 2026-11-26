@@ -1,0 +1,11 @@
+# Respaldo diario a las 03:00. Si el servidor estaba apagado a esa hora, se hace al encenderse.
+[Unit]
+Description=Respaldo diario de Prácticas UBB
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

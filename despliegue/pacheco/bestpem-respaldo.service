@@ -1,0 +1,8 @@
+# Respaldo de la base de datos (lo activa bestpem-respaldo.timer).
+[Unit]
+Description=Respaldo de la base de datos de Prácticas UBB
+After=bestpem-db.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env bash %h/bestpem/respaldo.sh

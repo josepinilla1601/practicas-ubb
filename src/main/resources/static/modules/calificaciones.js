@@ -48,6 +48,7 @@ actions['delete-grade']=async t=>{
 // Exportar a Excel: respeta los filtros de la página y los permisos de cada cuenta.
 function enlaceExcel(filtros={}) {
   const q=new URLSearchParams(Object.entries(filtros).filter(([k,v])=>['asignaturaId','anio','semestre'].includes(k) && v!=='' && v!=null));
+  if(state.periodo)q.set('periodo',state.periodo);
   return `<a class="button excel" href="api/exportar/practicas.xlsx${q.toString()?'?'+q:''}" download title="Descarga un Excel con el resumen por práctica, los requisitos y las calificaciones">${icon('chart',16)} Exportar a Excel</a>`;
 }
 // El botón va a la derecha de la barra de la tabla (sobre la columna "Detalle"). Se agrega al final,

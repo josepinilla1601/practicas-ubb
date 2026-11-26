@@ -39,8 +39,13 @@ class PracticasIntegrationTest {
   @Autowired PasswordEncoder encoder;
  @BeforeEach void limpiarSoloBaseTest(){
   assertTrue(db.queryForObject("SELECT DATABASE()",String.class).endsWith("_test"),"Las pruebas necesitan una base exclusiva terminada en _test.");
-   for(String tabla:new String[]{"rubricas_colegio","fichas_inscripcion","bitacora_jornadas","calificaciones","asistente_mensajes","material_fragmentos","materiales","evaluaciones_colegio","revisiones","documentos","requisitos_practica","practicas","usuarios","estudiantes","centros"})db.update("DELETE FROM "+tabla);
+   for(String tabla:new String[]{"preferencias_centro","cupos_centro","rubricas_colegio","fichas_inscripcion","bitacora_jornadas","calificaciones","asistente_mensajes","material_fragmentos","materiales","evaluaciones_colegio","revisiones","documentos","requisitos_practica","practicas","usuarios","estudiantes","centros"})db.update("DELETE FROM "+tabla);
    db.update("INSERT INTO usuarios(correo,nombre,clave_hash,rol) VALUES('coordinacion@test.example','Pruebas','no-utilizada','COORDINADOR')");
+   // Las prácticas de prueba se registran en 2026-2: ese es el período actual.
+   db.update("INSERT IGNORE INTO periodos(anio,semestre) VALUES(2026,2)");db.update("UPDATE periodos SET estado=IF(anio=2026 AND semestre=2,'ACTUAL','HISTORICO')");
+   // Restos de una ejecución interrumpida: plantillas de prueba de 2030 y el período histórico de prueba.
+   db.update("DELETE r FROM requisitos_plantilla r JOIN periodos pe ON pe.id=r.periodo_id WHERE pe.anio=2030");
+   db.update("DELETE pe FROM periodos pe WHERE pe.anio=2021 AND pe.semestre=1 AND NOT EXISTS(SELECT 1 FROM practicas p WHERE p.periodo_id=pe.id) AND NOT EXISTS(SELECT 1 FROM requisitos_plantilla r WHERE r.periodo_id=pe.id) AND NOT EXISTS(SELECT 1 FROM materiales m WHERE m.periodo_id=pe.id)");
    mvc=MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).defaultRequest(get("/").with(csrf())).build();
  }
  JsonNode crear(String ruta,Object body,int status)throws Exception{
@@ -73,8 +78,10 @@ class PracticasIntegrationTest {
   crear("/centros",Map.of("nombre","Colegio sin comuna"),400);
  }
  @Test void hu03AsociacionesYDuplicado()throws Exception{
-  long s=alumno("P-1");var d=datos(s,"INT1",2026,null);crear("/practicas",d,400);
-  d.put("centroId",centro());crear("/practicas",d,201);crear("/practicas",d,409);
+  // Si la asignatura requiere centro y no se indica, la práctica queda "por asignar" (asignación por cupos).
+  long s=alumno("P-1");var d=datos(s,"INT1",2026,null);assertTrue(crear("/practicas",d,201).get("centro").isNull());
+  d.put("centroId",centro());crear("/practicas",d,409);
+  d.put("estudianteId",alumno("P-3"));crear("/practicas",d,201);crear("/practicas",d,409);
   d.put("estudianteId",999999);crear("/practicas",d,404);
   long p=practica("P-2","INI1",2026);assertEquals(1,seguimiento(p).get("practica").get("requeridos").asInt());
  }
@@ -139,6 +146,9 @@ class PracticasIntegrationTest {
    assertEquals("Requisito original",seguimiento(p).get("requisitos").get(0).get("nombre").asText());
    long r=requisito(p);
    mvc.perform(put("/api/requisitos/"+r+"/plazo").contentType("application/json").content("{\"fechaLimite\":\"2020-01-01\"}")).andExpect(status().isOk());
+   // 2030-2 es historial: no tiene vencidos. Como período actual, el plazo pasado sí queda vencido.
+   assertFalse(seguimiento(p).get("requisitos").get(0).get("vencido").asBoolean());
+   db.update("UPDATE periodos SET estado=IF(anio=2030 AND semestre=2,'ACTUAL','HISTORICO')");
    assertTrue(seguimiento(p).get("requisitos").get(0).get("vencido").asBoolean());
    db.update("DELETE FROM requisitos_plantilla WHERE id=?",plantilla);
   }
@@ -399,6 +409,85 @@ class PracticasIntegrationTest {
    assertEquals("PRACTICA",practica.get("tipo").asText());
    assertTrue(practica.get("respuesta").asText().contains("Fuentes de internet:\n• mineduc.cl"));
    assertEquals("https://www.mineduc.cl/mbe",practica.get("fuentes").get(0).get("url").asText());
+  }
+  @Test void selectorDePeriodoLimitaLasListasSinQuitarAcceso()throws Exception{
+   long actual=practica("PER-1","INI1",2026),anterior=practica("PER-2","INI1",2025);
+   // Sin período: se ven todas. El selector ofrece los períodos con prácticas.
+   assertEquals(2,json.readTree(mvc.perform(get("/api/practicas")).andReturn().getResponse().getContentAsString()).size());
+   mvc.perform(get("/api/periodos/visibles")).andExpect(status().isOk()).andExpect(jsonPath("$[0].anio").value(2026)).andExpect(jsonPath("$[1].anio").value(2025));
+   // Con período: solo ese semestre en la lista, el resumen y los indicadores.
+   var lista=json.readTree(mvc.perform(get("/api/practicas").header("X-Periodo","2025-2")).andReturn().getResponse().getContentAsString());
+   assertEquals(1,lista.size());assertEquals(anterior,lista.get(0).get("id").asLong());
+   mvc.perform(get("/api/resumen").header("X-Periodo","2025-2")).andExpect(jsonPath("$.practicas").value(1));
+   mvc.perform(get("/api/indicadores").header("X-Periodo","2026-2")).andExpect(jsonPath("$.practicas.length()").value(1));
+   // La práctica de otro período sigue accesible desde su enlace, y un valor inválido se ignora.
+   mvc.perform(get("/api/practicas/"+actual+"/seguimiento").header("X-Periodo","2025-2")).andExpect(status().isOk());
+   assertEquals(2,json.readTree(mvc.perform(get("/api/practicas").header("X-Periodo","1=1")).andReturn().getResponse().getContentAsString()).size());
+  }
+  @Test void asignacionDeCentrosPorCupos()throws Exception{
+   // Prácticas que requieren centro, registradas "por asignar".
+   long ana=crear("/practicas",datos(alumno("CUP-1"),"PRO",2026,null),201).get("id").asLong();
+   long beto=crear("/practicas",datos(alumno("CUP-2"),"PRO",2026,null),201).get("id").asLong();
+   long a=centro(),b=centro();
+   cuenta("cup-ana@test.example","ESTUDIANTE",db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,ana));
+   cuenta("cup-beto@test.example","ESTUDIANTE",db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,beto));
+   var alumnaAna=user("cup-ana@test.example").roles("ESTUDIANTE");
+   var alumnoBeto=user("cup-beto@test.example").roles("ESTUDIANTE");
+   // Sin cupos publicados no se puede elegir; la coordinación define 1 cupo en A y 1 en B.
+   mvc.perform(put("/api/practicas/"+ana+"/preferencias").with(alumnaAna).contentType("application/json").content("{\"centros\":["+a+"]}")).andExpect(status().isBadRequest());
+   for(long c:new long[]{a,b})mvc.perform(put("/api/asignacion/cupos").contentType("application/json").content("{\"centroId\":"+c+",\"anio\":2026,\"semestre\":2,\"cupos\":1}")).andExpect(status().isOk());
+   mvc.perform(get("/api/practicas/"+ana+"/preferencias").with(alumnaAna)).andExpect(jsonPath("$.requiereCentro").value(true)).andExpect(jsonPath("$.centros.length()").value(2));
+   // Ambos prefieren A; Ana elige primero. Un estudiante no puede tocar preferencias ajenas ni repetir centros.
+   mvc.perform(put("/api/practicas/"+ana+"/preferencias").with(alumnaAna).contentType("application/json").content("{\"centros\":["+a+","+b+"]}")).andExpect(status().isOk());
+   mvc.perform(put("/api/practicas/"+beto+"/preferencias").with(alumnoBeto).contentType("application/json").content("{\"centros\":["+a+","+a+"]}")).andExpect(status().isBadRequest());
+   mvc.perform(put("/api/practicas/"+beto+"/preferencias").with(alumnaAna).contentType("application/json").content("{\"centros\":["+a+"]}")).andExpect(status().isNotFound());
+   Thread.sleep(1100);
+   mvc.perform(put("/api/practicas/"+beto+"/preferencias").with(alumnoBeto).contentType("application/json").content("{\"centros\":["+a+","+b+"]}")).andExpect(status().isOk());
+   mvc.perform(get("/api/asignacion?anio=2026&semestre=2")).andExpect(jsonPath("$.pendientes.length()").value(2));
+   mvc.perform(post("/api/asignacion/automatica").with(alumnaAna).contentType("application/json").content("{\"anio\":2026,\"semestre\":2}")).andExpect(status().isForbidden());
+   // Automática: Ana (primera en llegar) recibe A; Beto, al no quedar cupo en A, recibe B.
+   mvc.perform(post("/api/asignacion/automatica").contentType("application/json").content("{\"anio\":2026,\"semestre\":2}")).andExpect(jsonPath("$.asignadas").value(2));
+   assertEquals(a,db.queryForObject("SELECT centro_id FROM practicas WHERE id=?",Long.class,ana));
+   assertEquals(b,db.queryForObject("SELECT centro_id FROM practicas WHERE id=?",Long.class,beto));
+   // Sin cupos libres no se puede asignar a mano, ni bajar los cupos bajo lo ocupado; deshacer libera el cupo.
+   long carla=crear("/practicas",datos(alumno("CUP-3"),"PRO",2026,null),201).get("id").asLong();
+   mvc.perform(post("/api/practicas/"+carla+"/centro").contentType("application/json").content("{\"centroId\":"+a+"}")).andExpect(status().isConflict());
+   mvc.perform(put("/api/asignacion/cupos").contentType("application/json").content("{\"centroId\":"+a+",\"anio\":2026,\"semestre\":2,\"cupos\":0}")).andExpect(status().isBadRequest());
+   mvc.perform(delete("/api/practicas/"+ana+"/centro")).andExpect(status().isOk());
+   mvc.perform(post("/api/practicas/"+carla+"/centro").contentType("application/json").content("{\"centroId\":"+a+"}")).andExpect(status().isOk());
+   // Con centro asignado ya no se cambian las preferencias.
+   mvc.perform(put("/api/practicas/"+beto+"/preferencias").with(alumnoBeto).contentType("application/json").content("{\"centros\":["+a+"]}")).andExpect(status().isBadRequest());
+  }
+  @Test void soloElPeriodoActualGeneraPlazosYLoVenEstudiantes()throws Exception{
+   long actual=practica("HIS-1","INI1",2026);
+   long periodoActual=db.queryForObject("SELECT periodo_id FROM practicas WHERE id=?",Long.class,actual);
+   mvc.perform(put("/api/periodos/"+periodoActual+"/actual")).andExpect(status().isOk());
+   try {
+    // La coordinación crea un período antiguo: queda como historial. No se puede repetir.
+    mvc.perform(post("/api/periodos").contentType("application/json").content("{\"anio\":2021,\"semestre\":1}")).andExpect(status().isCreated()).andExpect(jsonPath("$.estado").value("HISTORICO"));
+    mvc.perform(post("/api/periodos").contentType("application/json").content("{\"anio\":2021,\"semestre\":1}")).andExpect(status().isConflict());
+    var d=datos(alumno("HIS-2"),"INI1",2021,null);d.put("semestre",1);
+    long antigua=crear("/practicas",d,201).get("id").asLong();
+    db.update("INSERT INTO requisitos_practica(practica_id,codigo,nombre,fecha_limite) VALUES(?,?,?,?)",antigua,"INF","Informe final",java.sql.Date.valueOf("2021-06-30"));
+    // Historial: sin plazos vencidos y marcado como tal.
+    var s=seguimiento(antigua);
+    assertEquals("HISTORICO",s.get("practica").get("periodo_estado").asText());
+    assertFalse(s.get("requisitos").get(0).get("vencido").asBoolean());
+    // El estudiante (y los docentes) solo ven el período actual.
+    cuenta("his@test.example","ESTUDIANTE",db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,antigua));
+    var alumno=user("his@test.example").roles("ESTUDIANTE");
+    mvc.perform(get("/api/practicas").with(alumno)).andExpect(jsonPath("$.length()").value(0));
+    mvc.perform(get("/api/practicas/"+antigua+"/seguimiento").with(alumno)).andExpect(status().isNotFound());
+    mvc.perform(get("/api/periodos").with(alumno)).andExpect(status().isForbidden());
+    // Si ese período pasa a ser el actual, vuelve a tener plazos y el estudiante lo ve.
+    long periodoAntiguo=db.queryForObject("SELECT periodo_id FROM practicas WHERE id=?",Long.class,antigua);
+    mvc.perform(put("/api/periodos/"+periodoAntiguo+"/actual")).andExpect(status().isOk());
+    assertTrue(seguimiento(antigua).get("requisitos").get(0).get("vencido").asBoolean());
+    mvc.perform(get("/api/practicas").with(alumno)).andExpect(jsonPath("$.length()").value(1));
+    assertEquals(1L,db.queryForObject("SELECT COUNT(*) FROM periodos WHERE estado='ACTUAL'",Long.class));
+   } finally {
+    mvc.perform(put("/api/periodos/"+periodoActual+"/actual")).andExpect(status().isOk());
+   }
   }
   @Test void loQueNoVieneDelDocumentoSeMarca(){
    var web=List.of(new ModeloIA.FuenteWeb("mineduc.cl","https://www.mineduc.cl"));

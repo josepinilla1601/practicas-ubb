@@ -11,7 +11,7 @@ Sitio público: **https://pacheco.chillan.ubiobio.cl/bestpem/**
 | `bestpem.pod` | Pod que agrupa MySQL y la app; solo publica el puerto 8019 |
 | `bestpem-db.container` | MySQL 8.4 con datos en el volumen `bestpem-mysql` |
 | `bestpem-app.container` | Java 21 que ejecuta `~/bestpem/app.jar` |
-| `instalar.sh` | Copia los servicios, genera contraseñas de MySQL la primera vez y reinicia |
+| `instalar.sh` | Copia los servicios, genera contraseñas de MySQL la primera vez, activa el respaldo diario y reinicia |
 
 En el servidor, `~/bestpem/db.env` y `~/bestpem/app.env` guardan las contraseñas (permisos 600). No se suben a Git.
 
@@ -29,6 +29,43 @@ ssh josepinilla1601@pacheco.chillan.ubiobio.cl 'systemctl --user restart bestpem
 
 ```bash
 ssh josepinilla1601@pacheco.chillan.ubiobio.cl 'podman ps; podman logs --tail 50 bestpem-app'
+```
+
+## Respaldos de la base de datos
+
+Cada noche a las 03:00 se guarda un respaldo comprimido en `~/bestpem/respaldos/` y se conservan los últimos 14 días.
+Incluye todo: cuentas, prácticas, notas, bitácoras y también los archivos entregados (se guardan dentro de MySQL).
+
+| Archivo | Qué hace |
+|---|---|
+| `respaldo.sh` | Genera el respaldo y borra los más antiguos |
+| `bestpem-respaldo.service` / `.timer` | Lo ejecutan todos los días a las 03:00 |
+
+Ver los respaldos y la próxima ejecución:
+
+```bash
+ssh josepinilla1601@pacheco.chillan.ubiobio.cl 'ls -lh ~/bestpem/respaldos; systemctl --user list-timers bestpem-respaldo.timer'
+```
+
+Hacer un respaldo ahora (por ejemplo, antes de actualizar):
+
+```bash
+ssh josepinilla1601@pacheco.chillan.ubiobio.cl 'bash ~/bestpem/respaldo.sh'
+```
+
+Descargar el último respaldo a tu computador:
+
+```bash
+scp "josepinilla1601@pacheco.chillan.ubiobio.cl:bestpem/respaldos/$(ssh josepinilla1601@pacheco.chillan.ubiobio.cl 'ls -1t ~/bestpem/respaldos | head -1')" .
+```
+
+**Restaurar un respaldo** (reemplaza todos los datos actuales por los del respaldo; úsalo solo si se perdió información):
+
+```bash
+ssh josepinilla1601@pacheco.chillan.ubiobio.cl
+systemctl --user stop bestpem-app
+gunzip -c ~/bestpem/respaldos/practicas_ubb_AAAA-MM-DD_HHMM.sql.gz | podman exec -i bestpem-db sh -c 'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD"'
+systemctl --user start bestpem-app
 ```
 
 ## Instalación desde cero

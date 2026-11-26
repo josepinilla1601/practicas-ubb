@@ -40,6 +40,17 @@ chmod 644 app.jar
 
 mkdir -p "$HOME/.config/containers/systemd"
 cp bestpem.pod bestpem-db.container bestpem-app.container "$HOME/.config/containers/systemd/"
+# Respaldo diario de la base de datos (03:00), con los últimos 14 en ~/bestpem/respaldos/.
+chmod 700 respaldo.sh
+mkdir -p "$HOME/.config/systemd/user"
+cp bestpem-respaldo.service bestpem-respaldo.timer "$HOME/.config/systemd/user/"
 systemctl --user daemon-reload
-systemctl --user restart bestpem-db.service bestpem-app.service
+systemctl --user enable --now bestpem-respaldo.timer
+# Primero la base de datos y después la aplicación, en órdenes separadas: reiniciarlas juntas hace que
+# systemd cancele ambos trabajos (la app depende de la base de datos) y las deja detenidas.
+systemctl --user start bestpem-pod.service
+systemctl --user restart bestpem-db.service
+sleep 15
+systemctl --user restart bestpem-app.service
 echo "Servicios iniciados. Revisa con: systemctl --user status bestpem-app  |  podman logs -f bestpem-app"
+echo "Respaldo diario activo. Próxima ejecución: systemctl --user list-timers bestpem-respaldo.timer"

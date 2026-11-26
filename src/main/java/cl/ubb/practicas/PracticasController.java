@@ -12,7 +12,10 @@ import java.nio.charset.StandardCharsets;
 @RequestMapping("/api")
 public class PracticasController {
     private final PracticasService servicio;
-    public PracticasController(PracticasService servicio) { this.servicio=servicio; }
+    private final Acceso acceso;
+    public PracticasController(PracticasService servicio,Acceso acceso) { this.servicio=servicio;this.acceso=acceso; }
+    /** Períodos con prácticas visibles para la cuenta: alimentan el selector de período del encabezado. */
+    @GetMapping("/periodos/visibles") public List<Map<String,Object>> periodosVisibles(){return acceso.periodosVisibles();}
     @GetMapping("/resumen") public Map<String,Object> resumen(){return servicio.resumen();}
     @GetMapping("/asignaturas") public List<Map<String,Object>> asignaturas(){return servicio.asignaturas();}
     @GetMapping("/estudiantes") public List<Map<String,Object>> estudiantes(){return servicio.estudiantes();}

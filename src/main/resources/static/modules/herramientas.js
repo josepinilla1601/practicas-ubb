@@ -102,7 +102,7 @@ actions['exportar-lista']=async t=>{
   notice('Preparando el Excel… la descarga comenzará en unos segundos.');
   setLoading(1);
   try {
-    const r=await fetch(`api/exportar/${t.dataset.lista}.xlsx${q?`?q=${encodeURIComponent(q)}`:''}`);
+    const r=await fetch(`api/exportar/${t.dataset.lista}.xlsx${q?`?q=${encodeURIComponent(q)}`:''}`,{headers:state.periodo?{'X-Periodo':state.periodo}:{}});
     if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.mensaje||'No se pudo generar el Excel. Inténtalo de nuevo.');}
     const nombre=(r.headers.get('content-disposition')||'').match(/filename="?([^"]+)"?/)?.[1]||`${t.dataset.lista}.xlsx`;
     const url=URL.createObjectURL(await r.blob());
