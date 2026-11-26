@@ -25,7 +25,9 @@ function mejorarTabla(table,clave,inicial) {
   // Se recuerda solo el orden elegido; la búsqueda y el filtro empiezan limpios (salvo que un aviso los indique).
   const pref={...leer(clave,{}),texto:'',estado:'',...(inicial||{})};
   // Solo etiquetas de estado sin números (no "8 de 8 recibidos" ni "2 por revisar").
-  const estados=[...new Set(filas.flatMap(f=>[...f.querySelectorAll('.pill')].filter(p=>!/\d/.test(p.textContent)).map(etiquetaEstado)))];
+  // Una fila puede declarar su estado (data-estado); si no, se usan sus etiquetas de color sin números.
+  const estadosDe=f=>f.dataset.estado?[f.dataset.estado]:[...f.querySelectorAll('.pill')].filter(p=>!/\d/.test(p.textContent)).map(etiquetaEstado);
+  const estados=[...new Set(filas.flatMap(estadosDe))];
   const chips=estados.length>=2 && estados.length<=7;
   const barra=document.createElement('div');barra.className='table-tools';
   barra.innerHTML=`<label class="table-search"><span class="sr-only">Buscar en ${e(titulo)}</span>${icon('eye',16)}<input type="search" placeholder="Buscar en esta tabla…" title="Atajo: tecla /" value="${e(pref.texto||'')}"></label>`+
@@ -40,7 +42,7 @@ function mejorarTabla(table,clave,inicial) {
   const aplicar=()=>{
     const q=normalizar(input.value);let visibles=0;
     for(const f of filas){
-      const ok=(!q || normalizar(f.textContent).includes(q)) && (!estado || [...f.querySelectorAll('.pill')].some(p=>etiquetaEstado(p)===estado));
+      const ok=(!q || normalizar(f.textContent).includes(q)) && (!estado || estadosDe(f).includes(estado));
       f.hidden=!ok;if(ok)visibles++;
     }
     vacio.hidden=visibles>0;
@@ -116,7 +118,7 @@ const ayudas={
   estudiantes:{titulo:'Estudiantes',resumen:'Antecedentes de cada estudiante.',pasos:['Para varios estudiantes a la vez, descarga la plantilla, complétala y súbela en "Importar estudiantes desde Excel".','Para uno solo, completa los datos y pulsa "Registrar".','Usa "Editar" para corregir datos y "Ver como estudiante" para ver su panel.'],faq:[['¿Qué pasa si un estudiante ya existe?','Se omite y se informa en el resultado, sin detener la importación.']]},
   centros:{titulo:'Centros de práctica',resumen:'Establecimientos y sus contactos.',pasos:['Completa los datos y pulsa "Registrar".','Usa "Editar" para mantener los contactos al día.'],faq:[]},
   bitacora:{titulo:'Bitácora de práctica',resumen:'El diario de campo de la práctica: cada jornada en el centro, lo que se hizo y la reflexión.',pasos:()=>role('ESTUDIANTE')?['Después de cada jornada, completa fecha, horario, curso y tipo de actividad.','Escribe qué hiciste y tu reflexión (puedes dictarla con el micrófono).','Pulsa "Registrar jornada". Tu profesor de colegio la visará.','Si te la observan, pulsa "Editar", corrígela y vuelve a quedar por visar.']:role('PROFESOR_COLEGIO')?['Usa "Solo por visar" para ver lo pendiente.','Pulsa "Visar" si la jornada ocurrió como está registrada.','Pulsa "Observar" y escribe qué debe corregir si algo no coincide.']:['Lee las jornadas y reflexiones de tus practicantes.','Pulsa "Retroalimentar" para dejar un comentario en una jornada.'],faq:[['¿Puedo cambiar una jornada visada?','No. Una vez visada queda cerrada; si hay un error, conversa con tu profesor de colegio.']]},
-  calendario:{titulo:'Calendario',resumen:'Plazos de entrega, jornadas de bitácora y fechas de inicio y término de las prácticas.',pasos:['Usa "Mes anterior" y "Mes siguiente" para moverte.','Pulsa un día con puntos de color para ver sus eventos.','Pulsa "Ver práctica" para abrir el seguimiento.'],faq:[['¿Qué significa cada color?','Morado: plazo. Rojo: plazo vencido. Verde: jornada registrada. Amarillo: inicio o término de una práctica.']]},
+  calendario:{titulo:'Calendario',resumen:'Plazos de entrega, jornadas de bitácora y fechas de inicio y término de las prácticas.',pasos:['Usa "Mes anterior" y "Mes siguiente" para moverte.','Pulsa un día con puntos de color para ver sus eventos.','Pulsa "Ver práctica" para abrir el seguimiento.'],faq:[['¿Qué significa cada color?','Morado: por entregar. Rojo: vencido. Azul: entregado y en revisión. Naranjo: corrección pendiente. Verde oscuro: aprobado. Verde claro: jornada de bitácora. Amarillo: inicio o término de una práctica.']]},
   vistaprevia:{titulo:'Vista como estudiante',resumen:'Ves el panel tal como lo ve el estudiante, para orientarlo. No puedes hacer cambios aquí.',pasos:['Revisa sus avisos, plazos y requisitos.','Pulsa "Ver detalle y entregar" para abrir su práctica completa.','Pulsa "Volver a estudiantes" para salir.'],faq:[]},
   cuenta:{titulo:'Cambiar contraseña',resumen:'Cambia tu contraseña de acceso.',pasos:['Escribe tu contraseña actual.','Escribe la nueva dos veces (10 a 60 caracteres).','Pulsa "Actualizar contraseña".'],faq:[]},
 };

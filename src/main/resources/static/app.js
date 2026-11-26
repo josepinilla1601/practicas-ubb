@@ -345,9 +345,14 @@ function progress(p) {
   if(!total)return '<span class="pill">Sin requisitos definidos</span>';
   return `<span class="pill ${rec===total?'ok':'pending'}">${rec} de ${total} recibidos</span><div class="progress"><span style="width:${100*rec/total}%"></span></div>`;
 }
+// Situación de la documentación de una práctica, para los filtros de la tabla.
+function avanceDocs(p) {
+  const total=Number(p.requeridos),rec=Number(p.recibidos);
+  return !total?'Sin requisitos':rec===0?'Sin entregas':rec===total?'Todo entregado':'En curso';
+}
 function practicesTable(items) {
   if(!items.length)return empty('No hay prácticas para mostrar','Revisa los filtros o las asignaciones.');
-  return `<div class="scroll"><table><thead><tr><th>ESTUDIANTE</th><th>ASIGNATURA / PERÍODO</th><th>DOCUMENTACIÓN</th><th>DETALLE</th></tr></thead><tbody>${items.map(p=>`<tr><td><strong>${e(p.estudiante)}</strong><small>${e(p.identificador)}</small></td><td>${e(p.asignatura)}<small>${p.anio}-${p.semestre} · ${e(p.centro||'Actividad universitaria')}</small></td><td>${progress(p)}</td><td>${button('Ver seguimiento',`data-detail="${p.id}"`,true)}</td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="scroll"><table><thead><tr><th>ESTUDIANTE</th><th>ASIGNATURA / PERÍODO</th><th>DOCUMENTACIÓN</th><th>DETALLE</th></tr></thead><tbody>${items.map(p=>`<tr data-estado="${avanceDocs(p)}"><td><strong>${e(p.estudiante)}</strong><small>${e(p.identificador)}</small></td><td>${e(p.asignatura)}<small>${p.anio}-${p.semestre} · ${e(p.centro||'Actividad universitaria')}</small></td><td data-sort="${Number(p.requeridos)?Number(p.recibidos)/Number(p.requeridos):-1}">${progress(p)}</td><td>${button('Ver seguimiento',`data-detail="${p.id}"`,true)}</td></tr>`).join('')}</tbody></table></div>`;
 }
 const allRoles=['COORDINADOR','PROFESOR_UBB','PROFESOR_COLEGIO','ESTUDIANTE'];
 registerPage('resumen','Vista general',allRoles,()=>heading('Una mirada a tus prácticas','Información visible según tu cuenta y tus asignaciones.')+
