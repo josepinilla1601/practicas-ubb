@@ -62,8 +62,7 @@ public class MaterialController {
         byte[] bytes=archivo.getBytes();
         var extraccion=TextoMaterial.extraer(nombre,bytes);
         var fragmentos=TextoMaterial.fragmentar(extraccion.texto());
-        db.update("INSERT IGNORE INTO periodos(anio,semestre) VALUES(?,?)",anio,semestre);
-        long periodo=db.queryForObject("SELECT id FROM periodos WHERE anio=? AND semestre=?",Long.class,anio,semestre);
+        long periodo=acceso.asegurarPeriodo(anio,semestre);
         long autor=acceso.id();
         var key=new GeneratedKeyHolder();
         db.update(con->{

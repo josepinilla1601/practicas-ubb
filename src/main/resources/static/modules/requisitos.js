@@ -26,3 +26,23 @@ detailBindings.push(id=>{
   form.elements.requisitoId.addEventListener('change',()=>{form.elements.fechaLimite.value=state.detail.requisitos.find(r=>Number(r.id)===Number(form.elements.requisitoId.value))?.fecha_limite||'';});
   onForm('#deadline-form',async f=>{await send(`/requisitos/${f.elements.requisitoId.value}/plazo`,{fechaLimite:f.elements.fechaLimite.value||null},'PUT');await saved('detalle',id);});
 });
+
+// Períodos: solo uno es el actual (genera plazos y avisos, y lo ven estudiantes y docentes).
+// Los demás son historial de la carrera, por ejemplo para traspasar prácticas en papel de años anteriores.
+async function tarjetaPeriodos() {
+  const periodos=await api('/periodos');state.periodosAdmin=periodos;
+  const filas=periodos.map(p=>`<tr><td><strong>Semestre ${p.semestre} · ${p.anio}</strong></td><td>${p.estado==='ACTUAL'?'<span class="pill ok">Actual</span>':'<span class="pill">Historial</span>'}</td><td>${p.practicas}</td><td>${p.estado==='ACTUAL'?'<span class="muted">—</span>':button('Marcar como actual',`type="button" data-action="periodo-actual" data-id="${p.id}" data-nombre="${p.anio}-${p.semestre}"`,true)}</td></tr>`).join('');
+  return card('Períodos',`<p class="hint" style="margin-top:0">El <strong>período actual</strong> es el único que genera plazos y avisos, y el único que ven estudiantes y docentes. Los demás quedan como <strong>historial</strong>: solo la coordinación los ve, y sirven para registrar prácticas de años anteriores.</p>`+
+    (periodos.length?`<div class="scroll"><table><thead><tr><th>PERÍODO</th><th>ESTADO</th><th>PRÁCTICAS</th><th>ACCIÓN</th></tr></thead><tbody>${filas}</tbody></table></div>`:empty('Aún no hay períodos'))+
+    `<form id="periodo-form" class="tools agregar-cupos">${field('Año','anio','number',true,4,new Date().getFullYear()-1)}${selectField('Semestre','semestre',[[1,'Primero'],[2,'Segundo']],true,1)}${button('Crear período','type="submit"')}</form>`);
+}
+pageHooks.push(async page=>{
+  if(page!=='plantillas' || !coord())return;
+  const html=await tarjetaPeriodos();if(state.page!=='plantillas')return;
+  $('#app .heading')?.insertAdjacentHTML('afterend',`<div id="periodos-card">${html}</div>`);
+  onForm('#periodo-form',async f=>{const r=await send('/periodos',{anio:Number(f.elements.anio.value),semestre:Number(f.elements.semestre.value)});await load();await go('plantillas');notice(r.mensaje);});
+});
+actions['periodo-actual']=async t=>{
+  if(!await confirmar({titulo:`¿Marcar ${t.dataset.nombre} como período actual?`,mensaje:'El período actual de ahora pasará a historial: sus prácticas dejarán de generar plazos y avisos, y estudiantes y docentes ya no las verán. Solo la coordinación podrá consultarlas.',aceptar:'Marcar como actual'}))return;
+  const r=await send(`/periodos/${t.dataset.id}/actual`,{},'PUT');await load();await go('plantillas');notice(r.mensaje);
+};

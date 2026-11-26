@@ -206,3 +206,9 @@ header .crumb-extra { font-weight:400; color:var(--muted); font-size:12px; margi
 .cupos-form .button, .asignar-form .button, .agregar-cupos .button { width:auto; margin:0; }
 .agregar-cupos .field { min-width:220px; }
 .agregar-cupos .field:has(input[type=number]) { min-width:0; width:110px; }
+
+/* Prácticas de períodos históricos (registro de la carrera, sin plazos ni avisos) */
+.estado-practica.historica { background:#f1f3f4; border-color:#d9dee0; }
+.estado-practica.historica .estado-texto { color:#55656b; }
+.estado-practica.historica .progress span { background:#8a979c; }
+.pill.historica { background:#eceff0; color:#55656b; }

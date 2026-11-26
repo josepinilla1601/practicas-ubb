@@ -97,8 +97,7 @@ public class CuposController {
     @PutMapping("/asignacion/cupos") public Map<String,Object> definirCupos(@Valid @RequestBody Cupos datos) {
         acceso.exigir("COORDINADOR");
         if(db.queryForObject("SELECT COUNT(*) FROM centros WHERE id=?",Long.class,datos.centroId())==0)throw Problema.noExiste("El centro no existe.");
-        db.update("INSERT IGNORE INTO periodos(anio,semestre) VALUES(?,?)",datos.anio(),datos.semestre());
-        long periodo=periodo(datos.anio(),datos.semestre()).orElseThrow();
+        long periodo=acceso.asegurarPeriodo(datos.anio(),datos.semestre());
         long ocupados=db.queryForObject("SELECT COUNT(*) FROM practicas WHERE centro_id=? AND periodo_id=?",Long.class,datos.centroId(),periodo);
         if(datos.cupos()<ocupados)throw Problema.invalido("Este centro ya tiene "+ocupados+" practicante(s) asignado(s) en el período: los cupos no pueden ser menos.");
         db.update("INSERT INTO cupos_centro(centro_id,periodo_id,cupos) VALUES(?,?,?) ON DUPLICATE KEY UPDATE cupos=VALUES(cupos)",datos.centroId(),periodo,datos.cupos());

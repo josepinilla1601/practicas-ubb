@@ -37,6 +37,6 @@ function pintarSelectorPeriodo() {
   // Con un solo período no hace falta elegir: el selector se oculta.
   caja.hidden=!state.usuario || state.periodos.length<2;
   caja.classList.toggle('activo',!!state.periodo);
-  $('#periodo-select').innerHTML=`<option value="">Todos los períodos</option>`+state.periodos.map(p=>{const v=textoPeriodo(p);return `<option value="${v}" ${v===state.periodo?'selected':''}>Semestre ${p.semestre} · ${p.anio}</option>`;}).join('');
+  $('#periodo-select').innerHTML=`<option value="">Todos los períodos</option>`+state.periodos.map(p=>{const v=textoPeriodo(p);return `<option value="${v}" ${v===state.periodo?'selected':''}>Semestre ${p.semestre} · ${p.anio}${p.estado==='ACTUAL'?' (actual)':''}</option>`;}).join('');
 }
 sessionHooks.push(()=>{ if(!state.usuario){state.periodo='';state.periodos=[];} const caja=$('#periodo-selector'); if(caja)caja.hidden=!state.usuario || state.periodos.length<2; });

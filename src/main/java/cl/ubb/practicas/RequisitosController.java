@@ -30,8 +30,7 @@ public class RequisitosController {
     public Map<String,String> crear(@Valid @RequestBody Plantilla p) {
         acceso.exigir("COORDINADOR");
         if(db.queryForObject("SELECT COUNT(*) FROM asignaturas WHERE id=?",Long.class,p.asignaturaId())==0)throw Problema.noExiste("La asignatura no existe.");
-        db.update("INSERT IGNORE INTO periodos(anio,semestre) VALUES(?,?)",p.anio(),p.semestre());
-        long periodo=db.queryForObject("SELECT id FROM periodos WHERE anio=? AND semestre=?",Long.class,p.anio(),p.semestre());
+        long periodo=acceso.asegurarPeriodo(p.anio(),p.semestre());
         db.update("INSERT INTO requisitos_plantilla(asignatura_id,periodo_id,codigo,nombre,fecha_limite) VALUES(?,?,?,?,?)",p.asignaturaId(),periodo,p.codigo().strip().toUpperCase(Locale.ROOT),p.nombre().strip(),p.fechaLimite());
         return Map.of("mensaje","Requisito agregado a la plantilla.");
     }

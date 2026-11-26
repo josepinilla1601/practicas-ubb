@@ -41,6 +41,11 @@ class PracticasIntegrationTest {
   assertTrue(db.queryForObject("SELECT DATABASE()",String.class).endsWith("_test"),"Las pruebas necesitan una base exclusiva terminada en _test.");
    for(String tabla:new String[]{"preferencias_centro","cupos_centro","rubricas_colegio","fichas_inscripcion","bitacora_jornadas","calificaciones","asistente_mensajes","material_fragmentos","materiales","evaluaciones_colegio","revisiones","documentos","requisitos_practica","practicas","usuarios","estudiantes","centros"})db.update("DELETE FROM "+tabla);
    db.update("INSERT INTO usuarios(correo,nombre,clave_hash,rol) VALUES('coordinacion@test.example','Pruebas','no-utilizada','COORDINADOR')");
+   // Las prácticas de prueba se registran en 2026-2: ese es el período actual.
+   db.update("INSERT IGNORE INTO periodos(anio,semestre) VALUES(2026,2)");db.update("UPDATE periodos SET estado=IF(anio=2026 AND semestre=2,'ACTUAL','HISTORICO')");
+   // Restos de una ejecución interrumpida: plantillas de prueba de 2030 y el período histórico de prueba.
+   db.update("DELETE r FROM requisitos_plantilla r JOIN periodos pe ON pe.id=r.periodo_id WHERE pe.anio=2030");
+   db.update("DELETE pe FROM periodos pe WHERE pe.anio=2021 AND pe.semestre=1 AND NOT EXISTS(SELECT 1 FROM practicas p WHERE p.periodo_id=pe.id) AND NOT EXISTS(SELECT 1 FROM requisitos_plantilla r WHERE r.periodo_id=pe.id) AND NOT EXISTS(SELECT 1 FROM materiales m WHERE m.periodo_id=pe.id)");
    mvc=MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).defaultRequest(get("/").with(csrf())).build();
  }
  JsonNode crear(String ruta,Object body,int status)throws Exception{
@@ -141,6 +146,9 @@ class PracticasIntegrationTest {
    assertEquals("Requisito original",seguimiento(p).get("requisitos").get(0).get("nombre").asText());
    long r=requisito(p);
    mvc.perform(put("/api/requisitos/"+r+"/plazo").contentType("application/json").content("{\"fechaLimite\":\"2020-01-01\"}")).andExpect(status().isOk());
+   // 2030-2 es historial: no tiene vencidos. Como período actual, el plazo pasado sí queda vencido.
+   assertFalse(seguimiento(p).get("requisitos").get(0).get("vencido").asBoolean());
+   db.update("UPDATE periodos SET estado=IF(anio=2030 AND semestre=2,'ACTUAL','HISTORICO')");
    assertTrue(seguimiento(p).get("requisitos").get(0).get("vencido").asBoolean());
    db.update("DELETE FROM requisitos_plantilla WHERE id=?",plantilla);
   }
@@ -449,6 +457,37 @@ class PracticasIntegrationTest {
    mvc.perform(post("/api/practicas/"+carla+"/centro").contentType("application/json").content("{\"centroId\":"+a+"}")).andExpect(status().isOk());
    // Con centro asignado ya no se cambian las preferencias.
    mvc.perform(put("/api/practicas/"+beto+"/preferencias").with(alumnoBeto).contentType("application/json").content("{\"centros\":["+a+"]}")).andExpect(status().isBadRequest());
+  }
+  @Test void soloElPeriodoActualGeneraPlazosYLoVenEstudiantes()throws Exception{
+   long actual=practica("HIS-1","INI1",2026);
+   long periodoActual=db.queryForObject("SELECT periodo_id FROM practicas WHERE id=?",Long.class,actual);
+   mvc.perform(put("/api/periodos/"+periodoActual+"/actual")).andExpect(status().isOk());
+   try {
+    // La coordinación crea un período antiguo: queda como historial. No se puede repetir.
+    mvc.perform(post("/api/periodos").contentType("application/json").content("{\"anio\":2021,\"semestre\":1}")).andExpect(status().isCreated()).andExpect(jsonPath("$.estado").value("HISTORICO"));
+    mvc.perform(post("/api/periodos").contentType("application/json").content("{\"anio\":2021,\"semestre\":1}")).andExpect(status().isConflict());
+    var d=datos(alumno("HIS-2"),"INI1",2021,null);d.put("semestre",1);
+    long antigua=crear("/practicas",d,201).get("id").asLong();
+    db.update("INSERT INTO requisitos_practica(practica_id,codigo,nombre,fecha_limite) VALUES(?,?,?,?)",antigua,"INF","Informe final",java.sql.Date.valueOf("2021-06-30"));
+    // Historial: sin plazos vencidos y marcado como tal.
+    var s=seguimiento(antigua);
+    assertEquals("HISTORICO",s.get("practica").get("periodo_estado").asText());
+    assertFalse(s.get("requisitos").get(0).get("vencido").asBoolean());
+    // El estudiante (y los docentes) solo ven el período actual.
+    cuenta("his@test.example","ESTUDIANTE",db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,antigua));
+    var alumno=user("his@test.example").roles("ESTUDIANTE");
+    mvc.perform(get("/api/practicas").with(alumno)).andExpect(jsonPath("$.length()").value(0));
+    mvc.perform(get("/api/practicas/"+antigua+"/seguimiento").with(alumno)).andExpect(status().isNotFound());
+    mvc.perform(get("/api/periodos").with(alumno)).andExpect(status().isForbidden());
+    // Si ese período pasa a ser el actual, vuelve a tener plazos y el estudiante lo ve.
+    long periodoAntiguo=db.queryForObject("SELECT periodo_id FROM practicas WHERE id=?",Long.class,antigua);
+    mvc.perform(put("/api/periodos/"+periodoAntiguo+"/actual")).andExpect(status().isOk());
+    assertTrue(seguimiento(antigua).get("requisitos").get(0).get("vencido").asBoolean());
+    mvc.perform(get("/api/practicas").with(alumno)).andExpect(jsonPath("$.length()").value(1));
+    assertEquals(1L,db.queryForObject("SELECT COUNT(*) FROM periodos WHERE estado='ACTUAL'",Long.class));
+   } finally {
+    mvc.perform(put("/api/periodos/"+periodoActual+"/actual")).andExpect(status().isOk());
+   }
   }
   @Test void loQueNoVieneDelDocumentoSeMarca(){
    var web=List.of(new ModeloIA.FuenteWeb("mineduc.cl","https://www.mineduc.cl"));

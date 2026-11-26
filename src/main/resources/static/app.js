@@ -364,7 +364,7 @@ function avanceDocs(p) {
 }
 function practicesTable(items) {
   if(!items.length)return empty('No hay prácticas para mostrar','Revisa los filtros o las asignaciones.');
-  return `<div class="scroll"><table><thead><tr><th>ESTUDIANTE</th><th>ASIGNATURA / PERÍODO</th><th>DOCUMENTACIÓN</th><th>DETALLE</th></tr></thead><tbody>${items.map(p=>`<tr data-estado="${avanceDocs(p)}"><td><strong>${e(p.estudiante)}</strong><small>${e(p.identificador)}</small></td><td>${e(p.asignatura)}<small>${p.anio}-${p.semestre} · ${e(p.centro||'Actividad universitaria')}</small></td><td data-sort="${Number(p.requeridos)?Number(p.recibidos)/Number(p.requeridos):-1}">${progress(p)}</td><td>${button('Ver seguimiento',`data-detail="${p.id}"`,true)}</td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="scroll"><table><thead><tr><th>ESTUDIANTE</th><th>ASIGNATURA / PERÍODO</th><th>DOCUMENTACIÓN</th><th>DETALLE</th></tr></thead><tbody>${items.map(p=>`<tr data-estado="${avanceDocs(p)}"><td><strong>${e(p.estudiante)}</strong><small>${e(p.identificador)}</small></td><td>${e(p.asignatura)}${p.periodo_estado==='HISTORICO'?' <span class="pill historica">Historial</span>':''}<small>${p.anio}-${p.semestre} · ${e(p.centro||(p.requiere_centro?'Centro por asignar':'Actividad universitaria'))}</small></td><td data-sort="${Number(p.requeridos)?Number(p.recibidos)/Number(p.requeridos):-1}">${progress(p)}</td><td>${button('Ver seguimiento',`data-detail="${p.id}"`,true)}</td></tr>`).join('')}</tbody></table></div>`;
 }
 const allRoles=['COORDINADOR','PROFESOR_UBB','PROFESOR_COLEGIO','ESTUDIANTE'];
 registerPage('resumen','Vista general',allRoles,()=>heading('Una mirada a tus prácticas','Información visible según tu cuenta y tus asignaciones.')+
@@ -383,6 +383,12 @@ function bindPracticeForm() {
   const form=$('#practice-form');if(!form)return;
   const update=()=>{const a=state.asignaturas.find(x=>Number(x.id)===Number(form.elements.asignaturaId.value));form.elements.centroId.required=false;$('#center-hint').textContent=a?.requiere_centro?'Esta asignatura se realiza en un centro. Si lo dejas vacío, queda por asignar: el estudiante marca sus preferencias y lo asignas en "Asignación de centros".':'El centro es opcional para esta asignatura.';};
   form.elements.asignaturaId.addEventListener('change',update);update();
+  // Aviso si la práctica se registra fuera del período actual: queda como historial.
+  const actual=(state.periodos||[]).find(p=>p.estado==='ACTUAL');
+  const avisoPeriodo=()=>{let h=$('#periodo-hint');if(!h){form.elements.semestre.closest('.row').insertAdjacentHTML('afterend','<p id="periodo-hint" class="hint"></p>');h=$('#periodo-hint');}
+    const elegido=`${form.elements.anio.value}-${form.elements.semestre.value}`;
+    h.textContent=!actual?'':elegido===`${actual.anio}-${actual.semestre}`?`Período actual (${elegido}).`:`${elegido} no es el período actual (${actual.anio}-${actual.semestre}): la práctica quedará como historial, sin plazos ni avisos, y solo la verá la coordinación.`;};
+  form.elements.anio.addEventListener('input',avisoPeriodo);form.elements.semestre.addEventListener('change',avisoPeriodo);avisoPeriodo();
   onForm('#practice-form',async f=>{const d=formData(f);for(const k of ['estudianteId','asignaturaId','anio','semestre'])d[k]=Number(d[k]);d.centroId=d.centroId?Number(d.centroId):null;const p=await send('/practicas',d);await saved('detalle',p.id);});
 }
 registerPage('practicas','Prácticas y documentos',allRoles,()=>heading('Prácticas y documentos','Consulta las prácticas que tienes autorizadas.')+
@@ -425,7 +431,7 @@ registerPage('detalle','',allRoles,async id=>{
   // Recuadro de estado: verde si todo está aprobado, rojo si hay plazos vencidos, amarillo si está en proceso.
   const pendiente=r=>r.estado==='PENDIENTE' || r.estado==='OBSERVADO';
   const vencidos=data.requisitos.filter(r=>r.vencido && pendiente(r)).length;
-  const [claseEstado,textoEstado]=vencidos?['vencido',`${vencidos===1?'1 requisito vencido':`${vencidos} requisitos vencidos`}`]
+  const [claseEstado,textoEstado]=p.periodo_estado==='HISTORICO'?['historica','Registro histórico · sin plazos ni avisos']:vencidos?['vencido',`${vencidos===1?'1 requisito vencido':`${vencidos} requisitos vencidos`}`]
     :data.requisitos.length && data.requisitos.every(r=>r.estado==='APROBADO')?['al-dia','Todo aprobado']
     :['en-proceso',data.requisitos.length?'En proceso':'Sin requisitos definidos'];
   return button('← Volver',`data-page="${origen}" title="Volver a ${e(pages[origen].label)}"`,true)+

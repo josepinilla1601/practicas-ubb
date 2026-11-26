@@ -21,7 +21,8 @@ public class NotificacionesController {
     static final int MAXIMO=30;
 
     @GetMapping("/notificaciones") public Map<String,Object> listar() {
-        String rol=acceso.rol();var f=acceso.filtroPracticas();
+        // Los avisos solo consideran el período actual: el historial no genera pendientes.
+        String rol=acceso.rol();var f=acceso.filtroActual();
         Map<Long,String> nombres=new HashMap<>();
         for(var p:servicio.practicasTodas())nombres.put(((Number)p.get("id")).longValue(),String.valueOf(p.get("estudiante")));
         List<Map<String,Object>> avisos=new ArrayList<>();
