@@ -17,7 +17,8 @@ import java.util.*;
  * S2-18: responde con el material publicado y cita sus fuentes (redactado con IA si está configurada).
  * S2-19: informa los pendientes y plazos reales del estudiante.
  * S2-20: guarda y muestra el historial personal de cada cuenta.
- * Explicar documento: la IA explica un archivo subido o un material publicado.
+ * Retroalimentación de trabajos: la IA primero hace preguntas de reflexión y luego retroalimenta el archivo subido.
+ * Solo responde temas de la práctica, la asignatura, la matemática y la plataforma.
  */
 @RestController
 @RequestMapping("/api")
@@ -41,16 +42,51 @@ public class AsistenteController {
         Si los fragmentos no permiten responder la pregunta, responde exactamente: "%s"
         No inventes datos, fechas ni porcentajes. No uses formato Markdown (ni asteriscos ni #); para listas usa "• ".
         """.formatted(SIN_INFORMACION);
-    private static final String INSTRUCCIONES_DOCUMENTO="""
-        Eres el asistente del sistema Prácticas UBB y ayudas a estudiantes de Pedagogía en Educación Matemática a entender documentos.
-        No saludes ni te presentes. Explica el documento en español de Chile, con palabras simples y en este orden:
-        1. De qué trata, en dos o tres oraciones.
-        2. Las ideas o instrucciones principales, como lista con "• ".
-        3. Qué debe hacer el estudiante (entregas, plazos o requisitos), solo si el documento lo indica.
-        4. Los conceptos difíciles, explicados de forma sencilla, si los hay.
-        Si el estudiante hace una pregunta, respóndela primero usando solo el documento. Si la respuesta no está en el documento, dilo.
-        No inventes información. No uses formato Markdown (ni asteriscos ni #). Sé breve: máximo unas 250 palabras.
+    /** Respuesta de la IA cuando el documento o la pregunta no tienen relación con la práctica. */
+    static final String FUERA_DE_TEMA="[FUERA_DE_TEMA]";
+    /** Título del apartado donde la IA separa lo que no viene del documento. */
+    static final String APARTADO_INTERNET="Información complementada desde internet:";
+    static final String APARTADO_SIN_FUENTE="Información complementaria de la IA (no viene de tu documento ni de una fuente verificada; confírmala con tu profesor):";
+    private static final String TEMAS_PERMITIDOS="""
+        Temas permitidos: la práctica pedagógica y sus documentos (planificaciones, informes, reflexiones, bitácoras, evaluaciones),
+        la asignatura y la didáctica de la matemática escolar, la matemática en sí, el currículum y el Marco para la Buena Enseñanza,
+        y el uso de la plataforma Prácticas UBB. Cualquier otro tema (noticias, deportes, entretenimiento, tareas de otras áreas,
+        datos curiosos, programación, consejos personales, etc.) está fuera de tema.
         """;
+    private static final String REGLA_INTERNET="""
+        Tu base principal es el documento del estudiante. Si el documento no basta y necesitas información externa (por ejemplo,
+        el currículum nacional, las Bases Curriculares o el Marco para la Buena Enseñanza), puedes buscar en internet.
+        Todo dato que NO venga del documento va solo en un apartado final que empiece exactamente con "%s",
+        donde explicas qué agregaste y nombras la fuente (institución o sitio). Si no usaste información externa, no escribas ese apartado.
+        """.formatted(APARTADO_INTERNET);
+    /** Primera etapa: antes de dar retroalimentación, la IA hace preguntas para que el estudiante reflexione sobre su trabajo. */
+    private static final String INSTRUCCIONES_REFLEXION="""
+        Eres un tutor de práctica pedagógica de Pedagogía en Educación Matemática (Universidad del Bío-Bío).
+        Un estudiante subió un trabajo suyo para recibir retroalimentación. TODAVÍA NO des retroalimentación ni expliques el documento.
+        Primero escribe una oración que diga qué tipo de documento identificas (por ejemplo, una planificación de clase sobre fracciones).
+        Luego escribe exactamente tres preguntas de reflexión, numeradas 1., 2. y 3., que lo hagan pensar sobre su propio trabajo:
+        para qué sirve, qué buscaba lograr con sus alumnos, por qué tomó ciertas decisiones y qué podría mejorar.
+        Las preguntas deben ser abiertas, breves y referirse a partes concretas del documento. Si el estudiante hizo una pregunta, oriéntalas hacia ella.
+        Termina invitándolo a responder para darle una retroalimentación más precisa.
+        %s
+        Si el documento no tiene relación con estos temas, responde exactamente: "%s"
+        Español de Chile, tono cercano. No saludes. No uses Markdown (ni asteriscos ni #).
+        """.formatted(TEMAS_PERMITIDOS,FUERA_DE_TEMA);
+    /** Segunda etapa: retroalimentación concreta, considerando las reflexiones del estudiante. */
+    private static final String INSTRUCCIONES_RETROALIMENTACION="""
+        Eres un tutor de práctica pedagógica de Pedagogía en Educación Matemática (Universidad del Bío-Bío).
+        Da retroalimentación formativa y concreta al trabajo del estudiante, en español de Chile, con tono cercano y respetuoso. No saludes.
+        Usa este orden, con estos títulos en líneas separadas:
+        Sobre tus reflexiones: comenta en una o dos oraciones lo que respondió el estudiante (omite este apartado si no respondió).
+        Fortalezas: lista con "• ".
+        Aspectos por mejorar: lista con "• ", indicando la parte del documento a la que te refieres.
+        Sugerencias concretas: lista con "• " de acciones que pueda aplicar.
+        Si el estudiante hizo una pregunta, respóndela dentro de la retroalimentación.
+        %s
+        %s
+        Si el documento no tiene relación con estos temas, responde exactamente: "%s"
+        No inventes datos. No uses Markdown (ni asteriscos ni #). Máximo unas 350 palabras.
+        """.formatted(REGLA_INTERNET,TEMAS_PERMITIDOS,FUERA_DE_TEMA);
 
     /** Guía del sistema: la IA la usa para responder preguntas sobre cómo usar la plataforma y el propio asistente. */
     private static final String GUIA_SISTEMA="""
@@ -61,7 +97,7 @@ public class AsistenteController {
         - Profesores UBB: revisan entregas en el seguimiento de cada práctica (aprobar o solicitar corrección, con confirmación y opción de deshacer).
         - Profesores de colegio: registran fortalezas y aspectos por mejorar de sus practicantes.
         - Asistente: responde preguntas con el material publicado por los profesores y cita la fuente. Si eres estudiante, también te dice tus requisitos pendientes y plazos (pregunta "¿Qué tengo pendiente?").
-        - Explicar un documento: en el asistente flotante, pulsa el clip (a la izquierda del cuadro de texto) y elige un PDF, Word (DOCX), TXT o MD; si quieres algo específico, escribe tu pregunta antes de adjuntarlo. En la página "Asistente" también está la sección "Explicar un documento", donde puedes elegir un material publicado. El archivo no se guarda.
+        - Retroalimentación de un trabajo: en el asistente flotante, pulsa el clip (a la izquierda del cuadro de texto) y elige tu PDF, Word (DOCX), TXT o MD; en la página "Asistente" está la sección "Retroalimentación de tu trabajo". Primero el asistente te hace tres preguntas para que reflexiones sobre tu trabajo; cuando las respondas (o si eliges omitirlas), te da la retroalimentación: fortalezas, aspectos por mejorar y sugerencias. Si usa información de internet, lo indica con su fuente. El archivo no se guarda.
         - Apoyo matemático: el asistente resuelve y explica paso a paso ejercicios de matemática y da ideas para enseñar un contenido en el aula.
         - Dictado por voz: en los campos de texto largos y en el asistente hay un micrófono; púlsalo, permite el micrófono y habla. Puedes decir "coma", "punto y seguido" o "punto y aparte". Funciona en Chrome y Edge.
         - Ayuda: el botón "? Ayuda" (arriba) explica cada página paso a paso; la tecla ? también la abre. La guía de bienvenida está en tu nombre, arriba a la derecha.
@@ -72,14 +108,19 @@ public class AsistenteController {
         Responde en español de Chile, con tono cercano. No uses Markdown (ni asteriscos ni #); para listas usa "• ". Saluda solo si el usuario saludó.
         Clasifica la pregunta y empieza tu respuesta con la etiqueta que corresponda:
         [AYUDA] Saludos, agradecimientos o cómo usar la plataforma o el asistente. Responde SOLO con la guía entregada, en máximo cinco oraciones.
-          Si pregunta qué puedes hacer, menciona todas las funciones de la guía (material con fuentes, pendientes y plazos, explicar documentos, apoyo matemático y dictado).
+          Si pregunta qué puedes hacer, menciona todas las funciones de la guía (material con fuentes, pendientes y plazos, retroalimentación de trabajos, apoyo matemático y dictado).
         [MATEMATICA] Ejercicios o conceptos de matemática, o cómo enseñar un contenido matemático en el aula (didáctica, actividades, errores frecuentes de los alumnos).
           Resuelve paso a paso y explica el porqué de cada paso, de forma clara y verificable. Escribe las expresiones en texto simple (por ejemplo x^2, raíz(2), 3/4).
           Si es sobre enseñanza, da ideas concretas para el aula escolar chilena. Máximo unas 250 palabras.
+        [PRACTICA] Dudas pedagógicas generales de la práctica: cómo planificar una clase, gestionar el aula, evaluar, reflexionar sobre la propia práctica,
+          el currículum o el Marco para la Buena Enseñanza. Responde con ideas concretas, en máximo unas 200 palabras.
+        [FUERA_DE_TEMA] Cualquier pregunta que no tenga relación con la práctica, la asignatura, la matemática ni la plataforma. Escribe solo la etiqueta, sin responder la pregunta.
+        En [MATEMATICA] y [PRACTICA] puedes buscar en internet si lo necesitas; si usas información de internet, ponla en un apartado final
+        que empiece exactamente con "%s" y nombra la fuente. Si no la usaste, no escribas ese apartado.
         Si pregunta por reglamentos, requisitos académicos, fechas, porcentajes, notas u otra información institucional de las prácticas,
-        o si no tiene relación con las prácticas ni con la matemática, responde exactamente: "%s"
+        responde exactamente: "%s" (esa información solo puede venir del material publicado por la universidad, nunca de internet).
         No inventes funciones de la plataforma ni información institucional.
-        """.formatted(SIN_INFORMACION);
+        """.formatted(APARTADO_INTERNET,SIN_INFORMACION);
 
     private static final Set<String> PALABRAS_PLAZO=Set.of("pendiente","plazo","vence","vencen","vencido","vencida","atrasado","atrasada","atraso");
     private static final Set<String> PALABRAS_PERSONALES=Set.of("mis","me","tengo","debo","falta","faltan","yo");
@@ -111,34 +152,62 @@ public class AsistenteController {
         return mensajes;
     }
 
-    /** Explica con IA un archivo subido (PDF, DOCX, TXT o MD) o un material publicado. El archivo no se guarda. */
+    /**
+     * Retroalimentación con IA de un trabajo del estudiante (PDF, DOCX, TXT o MD). El archivo no se guarda.
+     * Etapa PREGUNTAS: la IA hace tres preguntas de reflexión, sin dar todavía la retroalimentación.
+     * Etapa RETROALIMENTACION: la IA da la retroalimentación considerando las respuestas del estudiante.
+     */
     @PostMapping(value="/asistente/explicar",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String,Object> explicar(@RequestPart(value="archivo",required=false) MultipartFile archivo,
-        @RequestParam(required=false) Long materialId,@RequestParam(required=false) String pregunta) throws IOException {
+        @RequestParam(required=false) String pregunta,@RequestParam(defaultValue="PREGUNTAS") String etapa,
+        @RequestParam(required=false) String respuestas) throws IOException {
         var usuario=acceso.actual();
-        if(!ia.disponible())throw new Problema(HttpStatus.SERVICE_UNAVAILABLE,"La explicación de documentos con IA todavía no está activada. Pide a la coordinación que configure la clave de Gemini.");
-        String consulta=pregunta==null?"":pregunta.strip();
+        if(!ia.disponible())throw new Problema(HttpStatus.SERVICE_UNAVAILABLE,"La retroalimentación de documentos con IA todavía no está activada. Pide a la coordinación que configure la clave de Gemini.");
+        if(!etapa.equals("PREGUNTAS") && !etapa.equals("RETROALIMENTACION"))throw Problema.invalido("Etapa no válida.");
+        String consulta=pregunta==null?"":pregunta.strip(),reflexion=respuestas==null?"":respuestas.strip();
         if(consulta.length()>1000)throw Problema.invalido("La pregunta puede tener como máximo 1000 caracteres.");
-        String nombre,texto;
-        if(archivo!=null && !archivo.isEmpty()) {
-            nombre=Optional.ofNullable(archivo.getOriginalFilename()).orElse("documento").replace('\\','/');
-            nombre=nombre.substring(nombre.lastIndexOf('/')+1).replaceAll("\\p{Cntrl}","_");
-            texto=TextoMaterial.textoDocumento(nombre,archivo.getBytes());
-        } else if(materialId!=null) {
-            nombre=materialVisible(usuario,materialId);
-            texto=String.join("\n\n",db.queryForList("SELECT texto FROM material_fragmentos WHERE material_id=? ORDER BY orden",String.class,materialId));
-        } else throw Problema.invalido("Adjunta un archivo o elige un material para explicar.");
+        if(reflexion.length()>3000)throw Problema.invalido("Tus respuestas pueden tener como máximo 3000 caracteres.");
+        if(archivo==null || archivo.isEmpty())throw Problema.invalido("Adjunta el trabajo que quieres que revise.");
+        String nombre=Optional.ofNullable(archivo.getOriginalFilename()).orElse("documento").replace('\\','/');
+        nombre=nombre.substring(nombre.lastIndexOf('/')+1).replaceAll("\\p{Cntrl}","_");
+        String texto=TextoMaterial.textoDocumento(nombre,archivo.getBytes());
         boolean recortado=texto.length()>LIMITE_DOCUMENTO;
         if(recortado)texto=texto.substring(0,LIMITE_DOCUMENTO);
-        String contenido="Documento: "+nombre+(recortado?" (solo se incluye la primera parte)":"")+"\n\n"+texto+
-            "\n\nPregunta del estudiante: "+(consulta.isEmpty()?"Explícame este documento.":consulta);
-        String explicacion;
-        try { explicacion=ia.generar(INSTRUCCIONES_DOCUMENTO,contenido); }
-        catch(ModeloIA.Falla f) { throw new Problema(f.cupo?HttpStatus.TOO_MANY_REQUESTS:HttpStatus.BAD_GATEWAY,f.getMessage()+" Inténtalo de nuevo en unos minutos."); }
-        if(recortado)explicacion+="\n\n(El documento es largo: la explicación considera solo su primera parte.)";
-        String registro="📄 "+nombre+(consulta.isEmpty()?"":" — "+consulta);
+        var contenido=new StringBuilder("Trabajo del estudiante: ").append(nombre).append(recortado?" (solo se incluye la primera parte)":"").append("\n\n").append(texto);
+        if(!consulta.isEmpty())contenido.append("\n\nPregunta del estudiante: ").append(consulta);
+        boolean preguntas=etapa.equals("PREGUNTAS");
+        if(!preguntas)contenido.append("\n\nRespuestas del estudiante a las preguntas de reflexión: ").append(reflexion.isEmpty()?"(prefirió no responderlas)":reflexion);
+        var fuentes=new ArrayList<Map<String,Object>>(List.of(Map.of("titulo",nombre,"tipo","ARCHIVO")));
+        String salida;
+        try {
+            if(preguntas)salida=ia.generar(INSTRUCCIONES_REFLEXION,contenido.toString()).strip();
+            else {
+                var r=ia.generarConInternet(INSTRUCCIONES_RETROALIMENTACION,contenido.toString());
+                salida=marcarInternet(r.texto().strip(),r.web());
+                r.web().forEach(w -> fuentes.add(Map.of("titulo",w.titulo(),"url",w.url(),"tipo","WEB")));
+            }
+        } catch(ModeloIA.Falla f) { throw new Problema(f.cupo?HttpStatus.TOO_MANY_REQUESTS:HttpStatus.BAD_GATEWAY,f.getMessage()+" Inténtalo de nuevo en unos minutos."); }
+        String registro="📄 "+nombre+(preguntas?(consulta.isEmpty()?"":" — "+consulta):" · Mis reflexiones: "+(reflexion.isEmpty()?"(las omití)":reflexion));
         if(registro.length()>1000)registro=registro.substring(0,997)+"…";
-        return guardar(usuario,registro,Map.of("tipo","ARCHIVO","respuesta",explicacion,"fuentes",List.of(Map.of("titulo",nombre,"tipo","ARCHIVO"))));
+        if(salida.startsWith(FUERA_DE_TEMA))
+            return guardar(usuario,registro,Map.of("tipo","FUERA_DE_TEMA","fuentes",List.of(),"respuesta",
+                "Este documento no parece estar relacionado con tu práctica, la asignatura o la matemática, así que no puedo revisarlo. Sube un trabajo de tu práctica, como una planificación, un informe o una reflexión."));
+        if(recortado)salida+="\n\n(El documento es largo: solo consideré su primera parte.)";
+        return guardar(usuario,registro,Map.of("tipo",preguntas?"REFLEXION":"ARCHIVO","respuesta",salida,"fuentes",fuentes));
+    }
+
+    /**
+     * Deja claro qué parte de la respuesta no viene del documento ni del material: si la IA buscó en internet,
+     * debe existir el apartado de internet; si no buscó, ese apartado se presenta como información sin fuente verificada.
+     */
+    static String marcarInternet(String texto,List<ModeloIA.FuenteWeb> web) {
+        var apartado=java.util.regex.Pattern.compile("(?im)^\\s*informaci[oó]n complementada desde internet\\s*:?").matcher(texto);
+        boolean tiene=apartado.find();
+        if(web.isEmpty())return tiene?texto.substring(0,apartado.start())+(apartado.start()>0?"\n":"")+APARTADO_SIN_FUENTE+texto.substring(apartado.end()):texto;
+        if(!tiene)texto+="\n\nParte de esta respuesta se complementó con información de internet.";
+        var lista=new StringBuilder("\nFuentes de internet:");
+        web.forEach(w -> lista.append("\n• ").append(w.titulo()));
+        return texto+lista;
     }
 
     private Map<String,Object> guardar(Map<String,Object> usuario,String pregunta,Map<String,Object> respuesta) {
@@ -149,32 +218,6 @@ public class AsistenteController {
         return r;
     }
 
-    /** Material publicado que la cuenta puede consultar (mismas reglas que el asistente). Devuelve su título. */
-    private String materialVisible(Map<String,Object> usuario,long id) {
-        String sql="SELECT m.titulo FROM materiales m WHERE m.id=? AND m.estado='PUBLICADO'";
-        List<Object> args=new ArrayList<>(List.of(id));
-        if("ESTUDIANTE".equals(usuario.get("rol")) || "PROFESOR_COLEGIO".equals(usuario.get("rol"))) {
-            var filtro=acceso.filtroPracticas();
-            sql+=" AND EXISTS(SELECT 1 FROM practicas p WHERE p.asignatura_id=m.asignatura_id AND p.periodo_id=m.periodo_id AND "+filtro.sql()+")";
-            args.addAll(Arrays.asList(filtro.args()));
-        }
-        return db.queryForList(sql,String.class,args.toArray()).stream().findFirst()
-            .orElseThrow(() -> Problema.noExiste("El material no existe, no está publicado o no corresponde a tus asignaturas."));
-    }
-
-    /** Materiales publicados que la cuenta puede pedir que se expliquen. */
-    @GetMapping("/asistente/materiales") public List<Map<String,Object>> materialesDisponibles() {
-        var usuario=acceso.actual();
-        String sql="SELECT m.id,m.titulo,a.nombre asignatura FROM materiales m JOIN asignaturas a ON a.id=m.asignatura_id WHERE m.estado='PUBLICADO'";
-        List<Object> args=new ArrayList<>();
-        if("ESTUDIANTE".equals(usuario.get("rol")) || "PROFESOR_COLEGIO".equals(usuario.get("rol"))) {
-            var filtro=acceso.filtroPracticas();
-            sql+=" AND EXISTS(SELECT 1 FROM practicas p WHERE p.asignatura_id=m.asignatura_id AND p.periodo_id=m.periodo_id AND "+filtro.sql()+")";
-            args.addAll(Arrays.asList(filtro.args()));
-        }
-        return db.queryForList(sql+" ORDER BY m.titulo",args.toArray());
-    }
-
     /** Quita las citas a fuentes que no existen (por ejemplo, la IA confunde "Artículo 3" con la fuente [3]). */
     static String citasValidas(String texto,int fuentes) {
         return java.util.regex.Pattern.compile(" ?\\[(\\d+)\\]").matcher(texto)
@@ -182,6 +225,10 @@ public class AsistenteController {
     }
 
     private static final Map<String,Object> FUENTE_GUIA=Map.of("titulo","Guía de uso de Prácticas UBB","tipo","GUIA");
+    private static Map<String,Object> fueraDeTema() {
+        return Map.of("tipo","FUERA_DE_TEMA","fuentes",List.of(),"respuesta","Solo puedo ayudarte con temas de tu práctica: tus trabajos y documentos, la asignatura, "+
+            "la matemática y su enseñanza, y el uso de la plataforma. Esa pregunta no tiene relación con eso, así que prefiero no responderla. ¿Hay algo de tu práctica en que te pueda ayudar?");
+    }
     private static Map<String,Object> sinRespaldo() {
         return Map.of("tipo","SIN_RESPALDO","fuentes",List.of(),"respuesta","No encontré información suficiente en el material publicado para responder con seguridad. "+
             "Prueba con otras palabras o consulta directamente a tu profesor.");
@@ -191,9 +238,14 @@ public class AsistenteController {
     private Map<String,Object> sinFragmentos(Map<String,Object> usuario,String pregunta) {
         if(ia.disponible()) {
             try {
-                String respuesta=ia.generar(INSTRUCCIONES_GENERAL,GUIA_SISTEMA+"\nRol de quien pregunta: "+usuario.get("rol")+"\n\nPregunta: "+pregunta).strip();
+                var r=ia.generarConInternet(INSTRUCCIONES_GENERAL,GUIA_SISTEMA+"\nRol de quien pregunta: "+usuario.get("rol")+"\n\nPregunta: "+pregunta);
+                String respuesta=r.texto().strip();
+                if(respuesta.startsWith(FUERA_DE_TEMA))return fueraDeTema();
+                List<Map<String,Object>> web=r.web().stream().<Map<String,Object>>map(w -> Map.of("titulo",w.titulo(),"url",w.url(),"tipo","WEB")).toList();
                 if(respuesta.startsWith("[MATEMATICA]"))
-                    return Map.of("tipo","MATEMATICA","respuesta",respuesta.substring(12).strip()+"\n\nRespuesta generada con IA: revisa los pasos antes de usarla en clases o en una evaluación.","fuentes",List.of());
+                    return Map.of("tipo","MATEMATICA","respuesta",marcarInternet(respuesta.substring(12).strip(),r.web())+"\n\nRespuesta generada con IA: revisa los pasos antes de usarla en clases o en una evaluación.","fuentes",web);
+                if(respuesta.startsWith("[PRACTICA]"))
+                    return Map.of("tipo","PRACTICA","respuesta",marcarInternet(respuesta.substring(10).strip(),r.web())+"\n\nRespuesta generada con IA: compárala con lo que indique tu profesor.","fuentes",web);
                 if(respuesta.startsWith("[AYUDA]"))respuesta=respuesta.substring(7).strip();
                 return respuesta.startsWith(SIN_INFORMACION)?sinRespaldo():Map.of("tipo","AYUDA","respuesta",respuesta,"fuentes",List.of(FUENTE_GUIA));
             } catch(ModeloIA.Falla f) { /* sin IA disponible: se usan las respuestas fijas */ }
@@ -207,13 +259,13 @@ public class AsistenteController {
         String t=BuscadorMaterial.sinTildes(pregunta).replaceAll("[¿?¡!.,]"," ").replaceAll("\\s+"," ").strip();
         if(t.matches(".*\\b(explic|resum|lee|leer|revis|analiz)\\w*\\b.*") && t.matches(".*\\b(archivo|archivos|documento|documentos|pdf|word|docx)\\b.*"))
             return iaActiva
-                ?"Sí. Pulsa el clip que está a la izquierda del cuadro de texto, elige un PDF, Word (DOCX), TXT o MD y te lo explico. Si buscas algo específico, escribe tu pregunta antes de adjuntarlo, por ejemplo: \"¿Qué tengo que entregar?\". El archivo no se guarda en el sistema."
-                :"Por ahora la explicación de documentos con IA no está activada. Cuando la coordinación configure la clave de Gemini, podrás adjuntar un PDF, Word, TXT o MD con el clip del asistente.";
+                ?"Sí. Pulsa el clip que está a la izquierda del cuadro de texto y elige tu trabajo (PDF, Word, TXT o MD). Primero te haré tres preguntas para que reflexiones sobre él y, cuando las respondas, te daré la retroalimentación. Si buscas algo específico, escríbelo antes de adjuntarlo. El archivo no se guarda en el sistema."
+                :"Por ahora la retroalimentación de documentos con IA no está activada. Cuando la coordinación configure la clave de Gemini, podrás adjuntar tu trabajo (PDF, Word, TXT o MD) con el clip del asistente.";
         if(t.matches(".*\\b(dict\\w*|voz|microfono)\\b.*"))
             return "Sí. En los campos de texto largos y aquí en el asistente hay un botón de micrófono. Púlsalo, permite el micrófono y habla: el texto se escribe solo. Puedes decir \"coma\", \"punto y seguido\" o \"punto y aparte\". Para terminar, vuelve a pulsarlo o presiona Esc. Funciona en Chrome y Edge.";
         if(t.matches(".*\\b(que puedes hacer|que sabes hacer|como funcionas|para que sirves|como te uso|como funciona el asistente|en que me puedes ayudar)\\b.*") || t.equals("ayuda"))
             return "Puedo ayudarte con esto:\n• Responder preguntas con el material publicado por tus profesores, citando la fuente.\n• Decirte tus requisitos pendientes y plazos (pregunta \"¿Qué tengo pendiente?\").\n"+
-                (iaActiva?"• Explicarte un documento: pulsa el clip y adjunta un PDF, Word, TXT o MD.\n• Resolver y explicar ejercicios de matemática, o darte ideas para enseñar un contenido.\n":"")+"• También puedes dictarme con el micrófono. Para ayuda de cada página, usa el botón \"? Ayuda\".";
+                (iaActiva?"• Darte retroalimentación de un trabajo tuyo: pulsa el clip y adjunta un PDF, Word, TXT o MD. Antes te haré preguntas para que reflexiones.\n• Resolver y explicar ejercicios de matemática, o darte ideas para enseñar un contenido.\n":"")+"• También puedes dictarme con el micrófono. Para ayuda de cada página, usa el botón \"? Ayuda\".";
         if(t.matches("(muchas )?gracias\\b.*") || t.matches("(ok|vale|perfecto) gracias\\b.*"))
             return "¡De nada! Si necesitas algo más, aquí estoy.";
         if(t.matches("(hola|holi|buenas|buenos dias|buenas tardes|buenas noches)\\b.*"))

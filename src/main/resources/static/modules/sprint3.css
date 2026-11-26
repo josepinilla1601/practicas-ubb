@@ -143,3 +143,34 @@
 .bell-empty { display:grid; place-items:center; gap:6px; padding:26px; color:var(--green); }
 .bell-empty p { margin:0; color:var(--muted); font-size:13px; }
 @media(max-width:860px) { .bell-menu { position:fixed; left:16px; right:16px; top:72px; width:auto; } }
+
+/* Menú lateral: si los grupos abiertos no caben en la pantalla, el menú se desplaza por sí solo
+   (la marca arriba y la cuenta abajo quedan fijas). */
+@media(min-width:701px) {
+  .sidebar nav { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; margin-right:-10px; padding-right:10px; scrollbar-width:thin; scrollbar-color:#3f646b transparent; }
+  .sidebar nav::-webkit-scrollbar { width:6px; }
+  .sidebar nav::-webkit-scrollbar-thumb { background:#3f646b; border-radius:6px; }
+  .sidebar-bottom { flex-shrink:0; }
+}
+
+/* Preguntas de reflexión del asistente: respetan los saltos de línea */
+.reflection-questions { white-space:pre-line; font-size:13px; line-height:1.6; color:var(--ink); }
+
+/* Encabezado del seguimiento de una práctica: nombre arriba y un recuadro con el estado de la documentación */
+.detalle-heading { margin:14px 0 12px; }
+.detalle-heading h1 { margin:0; }
+.estado-practica { display:flex; align-items:center; flex-wrap:wrap; gap:10px 16px; padding:12px 18px; border:1px solid; border-radius:10px; margin-bottom:20px; }
+.estado-practica .eyebrow { margin:0; }
+.estado-practica .estado-texto { font-size:13px; }
+.estado-practica .estado-avance { display:flex; align-items:center; gap:12px; margin-left:auto; }
+.estado-practica .estado-avance .progress { width:140px; margin:0; background:rgba(255,255,255,.7); }
+.estado-practica.al-dia { background:#eef8f2; border-color:#c6e4d3; }
+.estado-practica.al-dia .estado-texto { color:#1e745b; }
+.estado-practica.en-proceso { background:#fff8e6; border-color:#f0dcaa; }
+.estado-practica.en-proceso .estado-texto { color:#8a6212; }
+.estado-practica.en-proceso .progress span { background:#c9962a; }
+.estado-practica.vencido { background:#fdf0ee; border-color:#efcdc6; }
+.estado-practica.vencido .estado-texto { color:#a33a2c; }
+.estado-practica.vencido .progress span { background:#b94343; }
+header .crumb-extra { font-weight:400; color:var(--muted); font-size:12px; margin-left:4px; }
+@media(max-width:700px) { .estado-practica .estado-avance { margin-left:0; } header .crumb-extra { display:block; margin:2px 0 0; } }

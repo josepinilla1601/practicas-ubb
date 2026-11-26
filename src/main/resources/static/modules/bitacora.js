@@ -36,7 +36,7 @@ function formularioJornada(j={}) {
     <label class="field">¿Qué hiciste?${req}<textarea name="actividades" required maxlength="3000" placeholder="Ejemplo: realicé la clase de ecuaciones de primer grado con trabajo en parejas.">${e(j.actividades||'')}</textarea></label>
     <label class="field">Reflexión pedagógica<textarea name="reflexion" maxlength="3000" placeholder="¿Qué funcionó? ¿Qué cambiarías? ¿Qué aprendiste?">${e(j.reflexion||'')}</textarea></label>
     ${button(j.id?'Guardar cambios':'Registrar jornada','type="submit"')}${j.id?button('Cancelar','type="button" data-action="cancel-jornada"',true):''}
-    <p class="hint">Puedes dictar con el micrófono. Tu profesor de colegio visará la jornada; mientras no la vise, puedes editarla.</p></form>`;
+    <p class="hint">${role('ESTUDIANTE')?'Puedes dictar con el micrófono. Tu profesor de colegio visará la jornada; mientras no la vise, puedes editarla.':'Al guardar, si la jornada estaba observada, vuelve a quedar pendiente de visado.'}</p></form>`;
 }
 
 registerPage('bitacora','Bitácora',allRoles,async()=>{
@@ -51,9 +51,12 @@ registerPage('bitacora','Bitácora',allRoles,async()=>{
       `<div class="split">${card(edit?'Editar jornada':'Registrar una jornada',formularioJornada(edit))}${card('Mis jornadas',data.jornadas.length?`<div class="jornadas">${data.jornadas.map(j=>tarjetaJornada(j)).join('')}</div>`:empty('Todavía no registras jornadas','Registra tu primera jornada con el formulario.'))}</div>`;
   }
   const data=await api(`/bitacora${state.bitacoraPendientes?'?pendientes=true':''}`);state.bitacora=data.jornadas;
+  // La coordinación también puede corregir una jornada que aún no está visada: el formulario aparece arriba.
+  const edit=role('COORDINADOR')?data.jornadas.find(j=>Number(j.id)===Number(state.editJornada)):null;
+  const edicion=edit?card(`Editar jornada de ${edit.estudiante}`,formularioJornada(edit)):'';
   const filtro=`<div class="chips" role="group" aria-label="Mostrar"><button type="button" class="chip-filter" data-action="bitacora-filtro" data-valor="" aria-pressed="${!state.bitacoraPendientes}">Todas</button><button type="button" class="chip-filter" data-action="bitacora-filtro" data-valor="1" aria-pressed="${!!state.bitacoraPendientes}">Solo por visar</button></div>`;
   return heading('Bitácoras de práctica',role('PROFESOR_COLEGIO')?'Revisa y visa las jornadas que registran tus practicantes.':'Jornadas registradas por los practicantes que supervisas. Puedes dejar retroalimentación.')+
-    resumenBitacora(data.resumen)+card('Jornadas',filtro+(data.jornadas.length?`<div class="jornadas">${data.jornadas.map(j=>tarjetaJornada(j,{conEstudiante:true})).join('')}</div>`:empty(state.bitacoraPendientes?'No hay jornadas por visar':'Todavía no hay jornadas registradas','Cuando tus practicantes registren jornadas aparecerán aquí.')));
+    resumenBitacora(data.resumen)+edicion+card('Jornadas',filtro+(data.jornadas.length?`<div class="jornadas">${data.jornadas.map(j=>tarjetaJornada(j,{conEstudiante:true})).join('')}</div>`:empty(state.bitacoraPendientes?'No hay jornadas por visar':'Todavía no hay jornadas registradas','Cuando tus practicantes registren jornadas aparecerán aquí.')));
 },()=>{
   $('#bitacora-practica')?.elements.practica.addEventListener('change',async ev=>{state.bitacoraPractica=ev.target.value;state.editJornada=null;await go('bitacora');});
   onForm('#jornada-form',async f=>{
@@ -63,7 +66,15 @@ registerPage('bitacora','Bitácora',allRoles,async()=>{
   },'Guardando jornada…');
 });
 actions['bitacora-filtro']=async t=>{state.bitacoraPendientes=!!t.dataset.valor;await go('bitacora');};
-actions['edit-jornada']=async t=>{state.editJornada=t.dataset.id;await go('bitacora');$('#jornada-form')?.scrollIntoView({block:'center'});};
+// El formulario de edición está en la página Bitácora: desde el seguimiento de una práctica se abre allí, en esa práctica.
+actions['edit-jornada']=async t=>{
+  const j=(state.bitacora||[]).find(x=>Number(x.id)===Number(t.dataset.id));
+  if(j?.practica_id)state.bitacoraPractica=j.practica_id;
+  state.editJornada=t.dataset.id;state.bitacoraPendientes=false;
+  await go('bitacora');
+  const form=$('#jornada-form');
+  if(form){form.scrollIntoView({block:'center'});form.elements.curso?.focus();}
+};
 actions['cancel-jornada']=async()=>{state.editJornada=null;await go('bitacora');};
 actions['delete-jornada']=async t=>{
   if(!await confirmar({titulo:'¿Eliminar esta jornada?',mensaje:'Se quitará de tu bitácora y de tus horas registradas.',aceptar:'Eliminar jornada',peligro:true}))return;
