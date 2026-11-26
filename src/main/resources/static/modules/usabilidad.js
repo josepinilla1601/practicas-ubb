@@ -24,7 +24,8 @@ function mejorarTabla(table,clave,inicial) {
   const titulo=table.closest('.card')?.querySelector('.card-head h2')?.textContent||'la tabla';
   // Se recuerda solo el orden elegido; la búsqueda y el filtro empiezan limpios (salvo que un aviso los indique).
   const pref={...leer(clave,{}),texto:'',estado:'',...(inicial||{})};
-  const estados=[...new Set(filas.flatMap(f=>[...f.querySelectorAll('.pill')].map(etiquetaEstado)))];
+  // Solo etiquetas de estado sin números (no "8 de 8 recibidos" ni "2 por revisar").
+  const estados=[...new Set(filas.flatMap(f=>[...f.querySelectorAll('.pill')].filter(p=>!/\d/.test(p.textContent)).map(etiquetaEstado)))];
   const chips=estados.length>=2 && estados.length<=7;
   const barra=document.createElement('div');barra.className='table-tools';
   barra.innerHTML=`<label class="table-search"><span class="sr-only">Buscar en ${e(titulo)}</span>${icon('eye',16)}<input type="search" placeholder="Buscar en esta tabla…" title="Atajo: tecla /" value="${e(pref.texto||'')}"></label>`+
@@ -71,6 +72,25 @@ pageHooks.push(page=>{
   const inicial=state.tablaInicial;state.tablaInicial=null;
   document.querySelectorAll('#app .card table').forEach((t,i)=>mejorarTabla(t,`tabla:${page}:${i}`,i===0&&inicial?{texto:'',estado:inicial.filtro||'',orden:inicial.orden||''}:null));
 });
+
+/* ---------- Botones de formulario en una fila centrada (heurística 8: diseño ordenado) ---------- */
+// Junta los botones seguidos de cada formulario en un contenedor .form-actions, para que queden lado a lado y centrados.
+function agruparBotones(raiz) {
+  raiz.querySelectorAll('form').forEach(f=>{
+    if(f.id==='login-form' || f.id==='widget-form' || f.classList.contains('modal'))return;
+    const botones=[...f.children].filter(el=>el.matches('.button') && !el.closest('.form-actions'));
+    if(!botones.length)return;
+    // Agrupa cada racha de botones consecutivos.
+    let grupo=null;
+    for(const el of [...f.children]) {
+      if(el.matches('.button') && botones.includes(el)) {
+        if(!grupo){grupo=document.createElement('div');grupo.className='form-actions';el.before(grupo);}
+        grupo.appendChild(el);
+      } else if(grupo && !el.matches('.form-actions'))grupo=null;
+    }
+  });
+}
+pageHooks.push(()=>agruparBotones($('#app')));
 
 /* ---------- Leyenda de campos obligatorios (heurística 5) ---------- */
 pageHooks.push(()=>{

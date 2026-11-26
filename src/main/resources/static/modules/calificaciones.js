@@ -50,9 +50,17 @@ function enlaceExcel(filtros={}) {
   const q=new URLSearchParams(Object.entries(filtros).filter(([k,v])=>['asignaturaId','anio','semestre'].includes(k) && v!=='' && v!=null));
   return `<a class="button excel" href="api/exportar/practicas.xlsx${q.toString()?'?'+q:''}" download title="Descarga un Excel con el resumen por práctica, los requisitos y las calificaciones">${icon('chart',16)} Exportar a Excel</a>`;
 }
+// El botón va a la derecha de la barra de la tabla (sobre la columna "Detalle"). Se agrega al final,
+// cuando la barra de búsqueda ya existe; si la tabla es corta y no tiene barra, va en el título de la tarjeta.
 pageHooks.push(page=>{
-  if(!puedeCalificar())return;
-  if(page==='indicadores' && !$('#app .heading .excel'))$('#app .heading')?.insertAdjacentHTML('beforeend',enlaceExcel());
-  if(page==='practicas' && !$('#filter-form .excel'))$('#filter-form')?.insertAdjacentHTML('beforeend',enlaceExcel(state.filters));
+  if(!puedeCalificar() || !['indicadores','practicas'].includes(page))return;
+  setTimeout(()=>{
+    if(state.page!==page || $('#app .excel'))return;
+    const enlace=enlaceExcel(page==='practicas'?state.filters:{});
+    const tabla=$('#app .card table');if(!tabla)return;
+    const barra=tabla.closest('.card-body')?.querySelector('.table-tools');
+    if(barra)barra.insertAdjacentHTML('beforeend',enlace);
+    else tabla.closest('.card')?.querySelector('.card-head')?.insertAdjacentHTML('beforeend',enlace);
+  },0);
 });
 document.addEventListener('click',ev=>{ if(ev.target.closest('a.excel'))notice('Preparando el Excel… la descarga comenzará en unos segundos.'); });
