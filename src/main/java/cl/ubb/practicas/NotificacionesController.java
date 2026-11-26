@@ -23,7 +23,7 @@ public class NotificacionesController {
     @GetMapping("/notificaciones") public Map<String,Object> listar() {
         String rol=acceso.rol();var f=acceso.filtroPracticas();
         Map<Long,String> nombres=new HashMap<>();
-        for(var p:servicio.practicas())nombres.put(((Number)p.get("id")).longValue(),String.valueOf(p.get("estudiante")));
+        for(var p:servicio.practicasTodas())nombres.put(((Number)p.get("id")).longValue(),String.valueOf(p.get("estudiante")));
         List<Map<String,Object>> avisos=new ArrayList<>();
         LocalDate hoy=ReglasSeguimiento.hoy();
         switch(rol) {
@@ -44,6 +44,9 @@ public class NotificacionesController {
                     if("DEVUELTA".equals(ficha))avisos.add(aviso("danger","Te devolvieron la ficha de inscripción","Revisa el comentario, corrígela y envíala de nuevo.",p,"inscripcion"));
                     else if("SIN_FICHA".equals(ficha) || "BORRADOR".equals(ficha))avisos.add(aviso("info","Completa y envía tu ficha de inscripción","Curso, días, horario y fechas en el centro.",p,"inscripcion"));
                 }
+                for(var x:db.queryForList("SELECT p.id practica_id FROM practicas p JOIN asignaturas a ON a.id=p.asignatura_id WHERE "+f.sql()+
+                        " AND a.requiere_centro=TRUE AND p.centro_id IS NULL AND NOT EXISTS(SELECT 1 FROM preferencias_centro pc WHERE pc.practica_id=p.id)",f.args()))
+                    avisos.add(aviso("warn","Elige tus centros de práctica de preferencia","Marca hasta tres colegios; la coordinación asigna según los cupos.",practica(x),"inscripcion"));
             }
             case "PROFESOR_UBB","COORDINADOR" -> {
                 for(var d:db.queryForList("""

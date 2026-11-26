@@ -41,7 +41,7 @@ public class ExportarController {
         Set<Long> ids=new HashSet<>();practicas.forEach(p -> ids.add(id(p)));
         Map<Long,String> nombres=new HashMap<>();
         for(var u:db.queryForList("SELECT id,nombre FROM usuarios"))nombres.put(id(u),String.valueOf(u.get("nombre")));
-        var f=acceso.filtroPracticas();
+        var f=acceso.filtroListado();
         Map<Long,List<Map<String,Object>>> requisitos=new HashMap<>();
         for(var r:servicio.requisitos(f.sql(),f.args()))if(ids.contains(((Number)r.get("practica_id")).longValue()))
             requisitos.computeIfAbsent(((Number)r.get("practica_id")).longValue(),k -> new ArrayList<>()).add(r);
@@ -143,7 +143,7 @@ public class ExportarController {
                         Boolean.TRUE.equals(u.get("activo"))?"Activa":"Desactivada",u.get("identificador")==null?"—":u.get("identificador")));
             }
             case "bitacora" -> {
-                hoja="Bitácora";var f=acceso.filtroPracticas();
+                hoja="Bitácora";var f=acceso.filtroListado();
                 columnas=List.of("Estudiante","Asignatura","Fecha","Inicio","Término","Horas","Curso","Tipo","Actividades","Reflexión","Estado","Visada por","Comentario del colegio","Retroalimentación UBB");
                 for(var j:db.queryForList("""
                     SELECT CONCAT(e.nombres,' ',e.apellidos) estudiante,a.nombre asignatura,j.fecha,TIME_FORMAT(j.hora_inicio,'%H:%i') inicio,TIME_FORMAT(j.hora_fin,'%H:%i') fin,

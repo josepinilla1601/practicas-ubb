@@ -61,9 +61,11 @@ public class PracticasService {
         JOIN asignaturas a ON a.id=p.asignatura_id JOIN periodos pe ON pe.id=p.periodo_id
         LEFT JOIN centros c ON c.id=p.centro_id
         """;
-    public List<Map<String,Object>> practicas() { var f=acceso.filtroPracticas();return db.queryForList(PRACTICAS+" WHERE "+f.sql()+" ORDER BY p.id DESC",f.args()); }
+    public List<Map<String,Object>> practicas() { var f=acceso.filtroListado();return db.queryForList(PRACTICAS+" WHERE "+f.sql()+" ORDER BY p.id DESC",f.args()); }
+    /** Todas las prácticas autorizadas, sin importar el período elegido (avisos y asistente). */
+    public List<Map<String,Object>> practicasTodas() { var f=acceso.filtroPracticas();return db.queryForList(PRACTICAS+" WHERE "+f.sql()+" ORDER BY p.id DESC",f.args()); }
     public List<Map<String,Object>> buscarPracticas(String busqueda,Long asignaturaId,Integer anio,Integer semestre) {
-        var f=acceso.filtroPracticas();StringBuilder sql=new StringBuilder(PRACTICAS+" WHERE "+f.sql());
+        var f=acceso.filtroListado();StringBuilder sql=new StringBuilder(PRACTICAS+" WHERE "+f.sql());
         var args=new ArrayList<>(Arrays.asList(f.args()));
         if(busqueda!=null && !busqueda.isBlank()) {
             if(busqueda.length()>150)throw Problema.invalido("La búsqueda admite hasta 150 caracteres.");
@@ -81,8 +83,8 @@ public class PracticasService {
         acceso.exigir("COORDINADOR");
         estudiante(s.estudianteId());
         var asignatura=uno("SELECT * FROM asignaturas WHERE id=?","La asignatura no existe.",s.asignaturaId());
-        boolean necesita=Boolean.TRUE.equals(asignatura.get("requiere_centro")) || "1".equals(String.valueOf(asignatura.get("requiere_centro")));
-        if(necesita && s.centroId()==null)throw Problema.invalido("Esta asignatura requiere un centro de práctica.");
+        // Si la asignatura requiere centro y no se indica, la práctica queda "por asignar": el estudiante marca sus
+        // preferencias y la coordinación asigna según los cupos (CuposController).
         if(s.centroId()!=null)centro(s.centroId());
         db.update("INSERT IGNORE INTO periodos(anio,semestre) VALUES(?,?)",s.anio(),s.semestre());
         long periodo=db.queryForObject("SELECT id FROM periodos WHERE anio=? AND semestre=?",Long.class,s.anio(),s.semestre());
@@ -154,8 +156,9 @@ public class PracticasService {
         if(rows.isEmpty())throw Problema.noExiste("El documento no existe.");return rows.get(0);
     }
     public Map<String,Object> resumen() {
-        if(!"COORDINADOR".equals(acceso.rol())) {
-            var f=acceso.filtroPracticas();
+        // Con un período elegido, también la coordinación ve las cifras de ese período.
+        if(!"COORDINADOR".equals(acceso.rol()) || acceso.periodoSolicitado()!=null) {
+            var f=acceso.filtroListado();
             var r=db.queryForMap("SELECT COUNT(*) practicas,COUNT(DISTINCT p.estudiante_id) estudiantes,COUNT(DISTINCT p.centro_id) centros FROM practicas p WHERE "+f.sql(),f.args());
             r.put("documentos",db.queryForObject("SELECT COUNT(*) FROM documentos d JOIN requisitos_practica r ON r.id=d.requisito_id JOIN practicas p ON p.id=r.practica_id WHERE "+f.sql(),Long.class,f.args()));return r;
         }

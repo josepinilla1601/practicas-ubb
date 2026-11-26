@@ -15,7 +15,7 @@ public class IndicadoresController {
 
     @GetMapping("/indicadores") public Map<String,Object> indicadores() {
         acceso.exigir("COORDINADOR","PROFESOR_UBB");
-        var f=acceso.filtroPracticas();
+        var f=acceso.filtroListado();
         Map<Long,Map<String,Object>> porPractica=new LinkedHashMap<>();
         for(var p:servicio.practicas()) {
             var fila=new LinkedHashMap<String,Object>();

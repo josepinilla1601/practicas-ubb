@@ -42,7 +42,7 @@ public class BitacoraController {
 
     /** Jornadas de todas las prácticas que la cuenta puede ver; "pendientes" deja solo las que esperan visado. */
     @GetMapping("/bitacora") public Map<String,Object> todas(@RequestParam(defaultValue="false") boolean pendientes) {
-        var f=acceso.filtroPracticas();
+        var f=acceso.filtroListado();
         var jornadas=db.queryForList(JORNADAS+" WHERE "+f.sql()+(pendientes?" AND j.estado='REGISTRADA'":"")+" ORDER BY j.fecha DESC,j.hora_inicio DESC LIMIT 500",f.args());
         return Map.of("jornadas",jornadas,"resumen",resumen(jornadas));
     }

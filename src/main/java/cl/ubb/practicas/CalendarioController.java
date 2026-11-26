@@ -24,7 +24,7 @@ public class CalendarioController {
         try { ym=YearMonth.of(anio==null?hoy.getYear():anio,mes==null?hoy.getMonthValue():mes); }
         catch(Exception ex) { throw Problema.invalido("El mes indicado no es válido."); }
         LocalDate desde=ym.atDay(1),hasta=ym.atEndOfMonth();
-        var f=acceso.filtroPracticas();
+        var f=acceso.filtroListado();
         Map<Long,String> estudiantes=new HashMap<>();
         for(var p:servicio.practicas())estudiantes.put(((Number)p.get("id")).longValue(),String.valueOf(p.get("estudiante")));
         List<Map<String,Object>> eventos=new ArrayList<>();

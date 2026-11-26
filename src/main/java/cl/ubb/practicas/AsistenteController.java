@@ -277,7 +277,7 @@ public class AsistenteController {
     private Map<String,Object> plazos() {
         var f=acceso.filtroPracticas();
         var asignaturas=new HashMap<Long,String>();
-        for(var p:servicio.practicas())asignaturas.put(((Number)p.get("id")).longValue(),p.get("asignatura")+" "+p.get("anio")+"-"+p.get("semestre"));
+        for(var p:servicio.practicasTodas())asignaturas.put(((Number)p.get("id")).longValue(),p.get("asignatura")+" "+p.get("anio")+"-"+p.get("semestre"));
         var pendientes=servicio.requisitos(f.sql(),f.args()).stream().filter(r -> ReglasSeguimiento.pendiente(String.valueOf(r.get("estado"))))
             .sorted(Comparator.comparing(r -> r.get("fecha_limite")==null?"9999-12-31":r.get("fecha_limite").toString())).toList();
         StringBuilder texto=new StringBuilder();

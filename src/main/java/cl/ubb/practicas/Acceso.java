@@ -34,6 +34,32 @@ public class Acceso {
             default -> new Filtro("1=0",new Object[]{});
         };
     }
+    /**
+     * Igual que {@link #filtroPracticas()}, pero además limita las listas al período elegido en el selector del encabezado
+     * (cabecera X-Periodo o parámetro "periodo", con formato AAAA-S). No se usa para autorizar: una práctica de otro
+     * período sigue siendo accesible desde su enlace.
+     */
+    public Filtro filtroListado() {
+        var f=filtroPracticas();
+        var periodo=periodoSolicitado();
+        if(periodo==null)return f;
+        var args=new ArrayList<>(Arrays.asList(f.args()));args.add(periodo[0]);args.add(periodo[1]);
+        return new Filtro("("+f.sql()+") AND p.periodo_id=(SELECT pf.id FROM periodos pf WHERE pf.anio=? AND pf.semestre=?)",args.toArray());
+    }
+    /** Período elegido en el selector, como {año, semestre}, o null si se ven todos. */
+    public int[] periodoSolicitado() {
+        if(!(org.springframework.web.context.request.RequestContextHolder.getRequestAttributes() instanceof org.springframework.web.context.request.ServletRequestAttributes atributos))return null;
+        var pedido=atributos.getRequest();
+        String valor=Optional.ofNullable(pedido.getHeader("X-Periodo")).orElse(pedido.getParameter("periodo"));
+        if(valor==null || !valor.strip().matches("\\d{4}-[12]"))return null;
+        String[] partes=valor.strip().split("-");
+        return new int[]{Integer.parseInt(partes[0]),Integer.parseInt(partes[1])};
+    }
+    /** Períodos que tienen prácticas visibles para la cuenta (para el selector del encabezado). */
+    public List<Map<String,Object>> periodosVisibles() {
+        var f=filtroPracticas();
+        return db.queryForList("SELECT DISTINCT pe.anio,pe.semestre FROM practicas p JOIN periodos pe ON pe.id=p.periodo_id WHERE "+f.sql()+" ORDER BY pe.anio DESC,pe.semestre DESC",f.args());
+    }
     public void practica(long id) {
         var f=filtroPracticas();var args=new ArrayList<>(Arrays.asList(f.args()));args.add(id);
         if(db.queryForObject("SELECT COUNT(*) FROM practicas p WHERE "+f.sql()+" AND p.id=?",Long.class,args.toArray())==0)
