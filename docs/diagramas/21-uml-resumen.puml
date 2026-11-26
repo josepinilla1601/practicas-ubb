@@ -1,0 +1,90 @@
+@startuml 21-uml-resumen
+' Diagrama de actividades RESUMIDO: recorrido de una práctica de principio a fin, con un carril por rol.
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ActivityBackgroundColor #FFFFFF
+skinparam ActivityBorderColor #127562
+skinparam ActivityDiamondBackgroundColor #E9F4EF
+skinparam ActivityDiamondBorderColor #127562
+skinparam ArrowColor #17313B
+skinparam SwimlaneBorderColor #9DB8B0
+skinparam SwimlaneTitleFontColor #127562
+skinparam SwimlaneTitleFontStyle bold
+skinparam NoteBackgroundColor #FFFAF0
+skinparam NoteBorderColor #D8B164
+title Prácticas UBB — Recorrido de una práctica (resumen)
+
+|Coordinación|
+start
+:Define requisitos y plazos
+de la asignatura y período;
+:Registra estudiantes y centros
+(o los importa desde Excel);
+:Crea las cuentas y registra la práctica;
+note right: Los requisitos de la plantilla\nse copian solos a la práctica.
+:Asigna Profesor UBB (revisor)
+y profesor de colegio;
+
+|Estudiante|
+:Completa y envía la
+ficha de inscripción;
+
+|Profesor de colegio|
+:Confirma la ficha;
+
+|Coordinación|
+:Aprueba la ficha;
+
+|Estudiante|
+:Descarga la carta de presentación (PDF)
+y comienza en el centro;
+
+fork
+  |Estudiante|
+  :Registra cada jornada en la bitácora
+  (actividades y reflexión, puede dictar);
+  |Profesor de colegio|
+  :Visa u observa la jornada;
+  |Profesor UBB|
+  :Deja retroalimentación;
+fork again
+  |Estudiante|
+  repeat
+    :Entrega el documento del requisito
+    (PDF, DOCX o XLSX);
+    |Profesor UBB|
+    :Revisa la entrega;
+  repeat while (¿Pide corrección?) is (sí: el estudiante\nsube otra versión)
+  ->no;
+  :Requisito aprobado;
+fork again
+  |Estudiante|
+  :Consulta al asistente con IA
+  (reglamento, plazos, matemática,
+  explicar un documento);
+end fork
+
+|Profesor de colegio|
+:Evalúa el desempeño con la rúbrica
+del Marco para la Buena Enseñanza
+y deja su evaluación escrita;
+
+|Profesor UBB|
+:Registra las calificaciones internas
+(1,0 a 7,0 con ponderación; puede usar
+la nota sugerida de la rúbrica);
+
+|Sistema|
+:Calcula el promedio ponderado
+y la situación de la práctica;
+
+|Profesor UBB|
+:Revisa Indicadores y Calendario,
+y exporta todo a Excel;
+
+|Estudiante|
+:Ve sus notas, su avance
+y sus horas visadas;
+stop
+@enduml

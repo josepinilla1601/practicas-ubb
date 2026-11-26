@@ -35,3 +35,17 @@ java -jar ..\..\target\plantuml\plantuml-1.2024.7.jar -charset UTF-8 -tpng 0*.pu
 ```
 
 Si cambia el código (por ejemplo, un método nuevo), actualiza el `.puml` correspondiente y vuelve a generar las imágenes, para que los diagramas sigan coherentes con lo implementado.
+
+## Sprint 3: vista completa y resumida
+
+| Archivo | Qué muestra | Para quién |
+|---|---|---|
+| `20-uml-completo` | **Diagrama de clases completo**: los 18 controladores REST con sus rutas, servicios y reglas de negocio (notas, rúbrica MBE, seguimiento, IA), seguridad, y las 18 tablas del modelo de datos con sus relaciones y multiplicidades | Revisión técnica detallada |
+| `21-uml-resumen` | **Diagrama de actividades resumido**: recorrido de una práctica de principio a fin, con un carril por rol (coordinación, estudiante, profesor de colegio, profesor UBB y sistema) | Entender el flujo en un minuto |
+| `22-arquitectura` | Arquitectura y despliegue: navegador, proxy HTTPS de la UBB, pod Podman con Spring Boot y MySQL en Pacheco, y Google Gemini | Visión general del sistema |
+
+El diagrama completo es grande, así que se genera sin el límite de tamaño por defecto:
+
+```
+java -DPLANTUML_LIMIT_SIZE=16384 -jar plantuml.jar -charset UTF-8 -tpng 20-uml-completo.puml 21-uml-resumen.puml 22-arquitectura.puml
+```
