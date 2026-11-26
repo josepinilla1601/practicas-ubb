@@ -1,0 +1,337 @@
+@startuml 20-uml-completo
+' Diagrama de clases COMPLETO del sistema Prácticas UBB (Sprint 3): controladores REST, servicios y reglas,
+' seguridad y modelo de datos persistido en MySQL. Generado a partir del código del paquete cl.ubb.practicas.
+!pragma layout smetana
+left to right direction
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #127562
+  ArrowColor #17313B
+  HeaderBackgroundColor #E9F4EF
+}
+skinparam package {
+  BorderColor #9DB8B0
+  FontColor #17313B
+  BackgroundColor #FBFCFC
+}
+title Prácticas UBB — Diagrama de clases completo (Sprint 3)
+
+package "Seguridad y soporte" {
+  class SeguridadConfig <<Configuration>> {
+    + passwordEncoder() : BCryptPasswordEncoder
+    + usuariosLogin(db) : UserDetailsService
+    + seguridad(http, db) : SecurityFilterChain
+    - claveCorrecta(db, correo, clave) : boolean
+  }
+  class Acceso <<Service>> {
+    + actual() : Map
+    + id() : long
+    + rol() : String
+    + exigir(roles...) : void
+    + filtroPracticas() : Filtro
+    + practica(id) : void
+  }
+  class ErroresApi <<RestControllerAdvice>> {
+    + validacion(ex) : campos por campo
+    + negocio(Problema) : ResponseEntity
+    ~ {static} explicar(codigo, args) : String
+  }
+  class Problema <<RuntimeException>> {
+    + estado : HttpStatus
+    + {static} invalido(msg) : Problema
+    + {static} noExiste(msg) : Problema
+  }
+  class InicializarCoordinador <<Component>> {
+    + crea la primera cuenta de coordinación
+  }
+}
+
+package "Controladores REST (/api)" {
+  class CuentaController {
+    + sesion() : GET /sesion
+    + clave() : POST /cuenta/clave
+    ~ {static} validarClave(clave)
+  }
+  class UsuariosController {
+    + listar() / crear() : /usuarios
+    + activar() : PATCH /usuarios/{id}/activo
+    + asignar() : PUT /practicas/{id}/docentes
+  }
+  class PracticasController {
+    + estudiantes / centros / asignaturas (CRUD)
+    + practicas() / crearPractica()
+    + seguimiento() : GET /practicas/{id}/seguimiento
+    + adjuntar() : POST .../requisitos/{r}/documentos
+    + descargar() : GET /documentos/{id}/descarga
+  }
+  class RequisitosController {
+    + listar() / crear() / editar() : /plantillas
+    + configurar() : POST /practicas/{id}/requisitos/configurar
+    + plazo() : PUT /requisitos/{id}/plazo
+  }
+  class RevisionController {
+    + revisar() : POST /documentos/{id}/revision
+    + anular() : DELETE /documentos/{id}/revision
+    + eliminar() : DELETE /documentos/{id}
+  }
+  class PortalEstudianteController {
+    + panel() : GET /mi-panel
+    + vistaPrevia() : GET /estudiantes/{id}/panel
+  }
+  class EvaluacionController {
+    + listar() / registrar() : /practicas/{id}/evaluaciones
+  }
+  class RubricaController {
+    + rubrica() : GET /rubrica
+    + listar() / evaluar() : /practicas/{id}/rubricas
+    + usarComoNota() : POST /rubricas/{id}/usar-como-nota
+  }
+  class CalificacionesController {
+    + listar() / registrar() : /practicas/{id}/calificaciones
+    + eliminar() : DELETE /calificaciones/{id}
+    ~ {static} insertar(...) / resumen(...)
+  }
+  class BitacoraController {
+    + listar() / registrar() : /practicas/{id}/bitacora
+    + todas() : GET /bitacora
+    + editar() / eliminar() : /bitacora/{id}
+    + visar() : POST /bitacora/{id}/visado
+    + comentar() : POST /bitacora/{id}/comentario
+  }
+  class FichaInscripcionController {
+    + ver() / guardar() : /practicas/{id}/ficha
+    + enviar() : POST .../ficha/enviar
+    + decidir() : POST .../ficha/decision
+  }
+  class IndicadoresController {
+    + indicadores() : GET /indicadores
+  }
+  class CalendarioController {
+    + mes() : GET /calendario
+  }
+  class ExportarController {
+    + exportar() : GET /exportar/practicas.xlsx
+  }
+  class CartaPresentacionController {
+    + carta() : GET /practicas/{id}/carta.pdf
+  }
+  class ImportarEstudiantesController {
+    + importar() : POST /estudiantes/importar
+    + plantilla() : GET /estudiantes/plantilla.xlsx
+  }
+  class MaterialController {
+    + listar() / cargar() / detalle() : /materiales
+    + estado() : PATCH /materiales/{id}/estado
+    + descargar() : GET /materiales/{id}/descarga
+  }
+  class AsistenteController {
+    + preguntar() : POST /asistente
+    + historial() : GET /asistente/historial
+    + explicar() : POST /asistente/explicar
+    + estado() / materialesDisponibles()
+  }
+}
+
+package "Servicios y reglas de negocio" {
+  class PracticasService <<Service>> {
+    + practicas() / buscarPracticas(...)
+    + seguimiento(id) : Map
+    + requisitos(filtro, args) : List
+    + adjuntar(practica, requisito, archivo) : Map
+  }
+  class ReglasSeguimiento <<utilidad>> {
+    + {static} estado(archivos, decision) : String
+    + {static} pendiente(estado) : boolean
+    + {static} vencido(limite, pendiente, hoy) : boolean
+  }
+  class ReglasCalificacion <<utilidad>> {
+    + {static} promedio(notas) : BigDecimal
+    + {static} situacion(notas) : String
+    + {static} validarNota(nota) : String
+  }
+  class ReglasRubrica <<utilidad>> {
+    + CRITERIOS : 12 criterios MBE (A, B, C, D)
+    + {static} validar(niveles) : String
+    + {static} notaSugerida(niveles) : BigDecimal
+    + {static} porDominio(niveles) : Map
+  }
+  class BuscadorMaterial <<utilidad>> {
+    + {static} buscar(pregunta, fragmentos, max) : List
+    + {static} sinTildes(texto) : String
+  }
+  class TextoMaterial <<utilidad>> {
+    + {static} extraer(nombre, bytes) : Extraccion
+    + {static} textoDocumento(nombre, bytes) : String
+    + {static} fragmentar(texto) : List
+  }
+  interface ModeloIA {
+    + disponible() : boolean
+    + generar(instrucciones, contenido) : String
+  }
+  class GeminiIA <<Service>> {
+    - clave : GEMINI_API_KEY
+    - modelo : gemini-flash-lite-latest
+    + generar(...) : String
+  }
+  GeminiIA ..|> ModeloIA
+}
+
+package "Modelo de datos (MySQL · migraciones Flyway V1–V16)" {
+  class Usuario <<usuarios>> {
+    id : BIGINT
+    correo : VARCHAR (único)
+    nombre : VARCHAR
+    clave_hash : BCrypt
+    rol : COORDINADOR | PROFESOR_UBB | PROFESOR_COLEGIO | ESTUDIANTE
+    activo : BOOLEAN
+  }
+  class Estudiante <<estudiantes>> {
+    id : BIGINT
+    identificador : VARCHAR (único)
+    nombres / apellidos / correo
+  }
+  class Centro <<centros>> {
+    id : BIGINT
+    nombre / comuna / direccion
+    contacto / correo / telefono
+  }
+  class Asignatura <<asignaturas>> {
+    id : BIGINT
+    codigo : INI1..PRO
+    nombre / ciclo
+    requiere_centro : BOOLEAN
+  }
+  class Periodo <<periodos>> {
+    id : BIGINT
+    anio : INT
+    semestre : 1 | 2
+  }
+  class Practica <<practicas>> {
+    id : BIGINT
+    profesor_responsable : VARCHAR
+  }
+  class RequisitoPlantilla <<requisitos_plantilla>> {
+    codigo / nombre
+    fecha_limite : DATE
+  }
+  class RequisitoPractica <<requisitos_practica>> {
+    codigo / nombre
+    fecha_limite : DATE
+    estado : calculado
+  }
+  class Documento <<documentos>> {
+    nombre_original / tipo_contenido
+    tamanio : BIGINT
+    contenido : LONGBLOB
+    cargado_en : TIMESTAMP
+  }
+  class Revision <<revisiones>> {
+    decision : APROBADO | OBSERVADO
+    comentario : VARCHAR
+  }
+  class EvaluacionColegio <<evaluaciones_colegio>> {
+    fortalezas / aspectos_mejora
+    recomendaciones
+  }
+  class RubricaColegio <<rubricas_colegio>> {
+    niveles : A1=3;A2=4;...
+    puntaje : DECIMAL
+    nota_sugerida : 1,0–7,0
+  }
+  class Calificacion <<calificaciones>> {
+    evaluacion : VARCHAR
+    nota : 1,0–7,0
+    ponderacion : 1–100 %
+    comentario
+  }
+  class JornadaBitacora <<bitacora_jornadas>> {
+    fecha / hora_inicio / hora_fin
+    curso / tipo
+    actividades / reflexion
+    estado : REGISTRADA | VISADA | OBSERVADA
+    comentario_colegio / comentario_ubb
+  }
+  class FichaInscripcion <<fichas_inscripcion>> {
+    curso / nivel / dias / horario
+    fecha_inicio / fecha_termino
+    horas_semanales : 1–45
+    estado : BORRADOR → ENVIADA → CONFIRMADA → APROBADA | DEVUELTA
+  }
+  class Material <<materiales>> {
+    titulo / nombre_original
+    estado : BORRADOR | PUBLICADO | RETIRADO
+  }
+  class FragmentoMaterial <<material_fragmentos>> {
+    orden : INT
+    texto : máx. 900 caracteres
+  }
+  class MensajeAsistente <<asistente_mensajes>> {
+    pregunta / respuesta
+    tipo : IA | MATERIAL | PLAZOS | MATEMATICA | AYUDA | ARCHIVO | SIN_RESPALDO
+    fuentes : JSON
+  }
+}
+
+
+' Relaciones del modelo de datos
+Usuario "0..1" -- "0..1" Estudiante : cuenta de >
+Estudiante "1" -- "0..*" Practica : realiza >
+Asignatura "1" -- "0..*" Practica
+Periodo "1" -- "0..*" Practica
+Centro "0..1" -- "0..*" Practica : recibe >
+Usuario "0..1" -- "0..*" Practica : profesor UBB >
+Usuario "0..1" -- "0..*" Practica : profesor colegio >
+Asignatura "1" -- "0..*" RequisitoPlantilla
+Periodo "1" -- "0..*" RequisitoPlantilla
+RequisitoPlantilla ..> RequisitoPractica : se copia al crear la práctica
+Practica "1" *-- "0..*" RequisitoPractica
+RequisitoPractica "1" *-- "0..*" Documento : versiones >
+Documento "1" -- "0..1" Revision
+Usuario "1" -- "0..*" Revision : revisor >
+Practica "1" *-- "0..*" EvaluacionColegio
+Practica "1" *-- "0..*" RubricaColegio
+Practica "1" *-- "0..*" Calificacion
+RubricaColegio ..> Calificacion : "usar como nota"
+Practica "1" *-- "0..*" JornadaBitacora
+Practica "1" *-- "0..1" FichaInscripcion
+Asignatura "1" -- "0..*" Material
+Periodo "1" -- "0..*" Material
+Material "1" *-- "1..*" FragmentoMaterial
+Usuario "1" -- "0..*" MensajeAsistente
+
+' Dependencias principales de la lógica
+PracticasController --> PracticasService
+PortalEstudianteController --> PracticasService
+IndicadoresController --> PracticasService
+ExportarController --> PracticasService
+CalendarioController --> PracticasService
+CartaPresentacionController --> PracticasService
+PracticasService --> ReglasSeguimiento
+IndicadoresController --> ReglasCalificacion
+CalificacionesController --> ReglasCalificacion
+RubricaController --> ReglasRubrica
+RubricaController --> CalificacionesController : insertar()
+ExportarController --> CalificacionesController : resumen()
+MaterialController --> TextoMaterial
+AsistenteController --> BuscadorMaterial
+AsistenteController --> TextoMaterial
+AsistenteController --> ModeloIA
+PracticasService --> Acceso
+SeguridadConfig ..> Usuario : autentica
+
+note right of Acceso
+  Todos los controladores llaman a Acceso:
+  exigir(rol) valida el rol y practica(id)
+  filtra para que cada cuenta vea solo
+  sus prácticas autorizadas (en el servidor).
+end note
+note bottom of GeminiIA
+  Sin clave o sin cupo, el asistente
+  responde con BuscadorMaterial.
+end note
+@enduml

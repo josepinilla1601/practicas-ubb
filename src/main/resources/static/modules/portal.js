@@ -11,8 +11,9 @@ const urgencia=r=>r.vencido?0:r.estado==='OBSERVADO'?1:r.estado==='PENDIENTE'?2:
 // Abre el seguimiento de la práctica con el formulario de entrega enfocado.
 actions['go-upload']=async t=>{state.focusUpload=t.dataset.requisito||true;await go('detalle',t.dataset.id);};
 
-registerPage('mipanel','Mi panel',['ESTUDIANTE'],async()=>{
-  const data=await api('/mi-panel');const s=data.estudiante;
+// Arma el panel con los datos de un estudiante (lo usan "Mi panel" y la vista previa de la coordinación).
+function panelEstudiante(data) {
+  const s=data.estudiante;
   const todos=data.practicas.flatMap(p=>p.requisitos.map(r=>({...r,practica:p})));
   const cuenta=estado=>todos.filter(r=>r.estado===estado).length;
   const vencidos=todos.filter(r=>r.vencido);
@@ -37,11 +38,13 @@ registerPage('mipanel','Mi panel',['ESTUDIANTE'],async()=>{
   const tabla=filas.length?`<div class="scroll"><table><thead><tr><th>REQUISITO</th><th>PLAZO</th><th>ESTADO</th><th></th></tr></thead><tbody>${filas.map(r=>`<tr class="${r.vencido?'row-alert':''}"><td>${e(r.nombre)}${data.practicas.length>1?`<small>${e(r.practica.asignatura)}</small>`:''}</td><td>${deadlineText(r)}</td><td>${typeof statusPill==='function'?statusPill(r.estado):e(r.estado)}</td><td>${r.estado==='APROBADO' || r.estado==='EN_REVISION'?'':button(r.estado==='OBSERVADO'?'Subir corrección':'Entregar',`type="button" data-action="go-upload" data-id="${r.practica.id}" data-requisito="${r.id}"`,true)}</td></tr>`).join('')}</tbody></table></div>`:empty('Sin requisitos definidos','La coordinación aún no configura los requisitos de tu práctica.');
 
   return heading(`Hola, ${s.nombres}`,'Aquí ves solo tus prácticas, tus documentos y tus plazos.',entregar)+aviso+resumen+atajos+practicas+card('Mis requisitos y plazos',tabla);
-});
+}
+registerPage('mipanel','Mi panel',['ESTUDIANTE'],async()=>panelEstudiante(await api('/mi-panel')));
 
 // Al llegar desde "Entregar", enfoca el formulario y deja elegido el requisito.
 pageHooks.push(page=>{
   if(page!=='detalle' || !state.focusUpload)return;
+  if(typeof mostrarPestana==='function')mostrarPestana('entregas');
   const form=$('#upload-form');const pedido=state.focusUpload;state.focusUpload=null;if(!form)return;
   if(pedido!==true && form.elements.requisitoId.querySelector(`option[value="${pedido}"]`))form.elements.requisitoId.value=pedido;
   form.scrollIntoView({behavior:'smooth',block:'center'});form.classList.add('highlight');

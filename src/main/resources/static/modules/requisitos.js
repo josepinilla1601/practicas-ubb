@@ -17,10 +17,10 @@ actions['cancel-template']=async()=>{state.editTemplate=null;await go('plantilla
 actions['configure-practice']=async t=>{await send(`/practicas/${t.dataset.id}/requisitos/configurar`,{});await saved('detalle',t.dataset.id);};
 
 requirementTable=data=>card('Requisitos y plazos',data.configurado?`<p class="hint">Fechas de entrega según el calendario de Chile (America/Santiago).</p><div class="scroll"><table><thead><tr><th>REQUISITO</th><th>PLAZO</th><th>ESTADO</th></tr></thead><tbody>${data.requisitos.map(r=>`<tr><td>${e(r.nombre)}</td><td>${e(r.fecha_limite||'Sin plazo')}</td><td><span class="pill">${e(r.estado)}</span>${r.vencido?' <span class="pill danger">Vencido</span>':''}</td></tr>`).join('')}</tbody></table></div>`:empty('Sin requisitos definidos','Configura una plantilla y luego inicializa esta práctica.')+(coord()?button('Aplicar plantilla a esta práctica',`data-action="configure-practice" data-id="${data.practica.id}"`):''));
-detailSections.push(data=>{
+detailSections.push(Object.assign(data=>{
   if(!role('COORDINADOR','PROFESOR_UBB') || !data.configurado)return '';
   return card('Actualizar un plazo',`<form id="deadline-form" class="tools">${selectField('Requisito','requisitoId',options(data.requisitos,r=>r.nombre))}${field('Fecha límite (vacío elimina el plazo)','fechaLimite','date',false,10)}${button('Guardar plazo','type="submit"')}</form>`);
-});
+},{orden:25,pestana:'entregas'}));
 detailBindings.push(id=>{
   const form=$('#deadline-form');if(!form)return;
   form.elements.requisitoId.addEventListener('change',()=>{form.elements.fechaLimite.value=state.detail.requisitos.find(r=>Number(r.id)===Number(form.elements.requisitoId.value))?.fecha_limite||'';});

@@ -1,0 +1,27 @@
+-- S3: bitácora de práctica (diario de campo). Cada jornada en el centro la registra el estudiante,
+-- la visa el profesor de colegio y el profesor UBB puede dejar retroalimentación.
+CREATE TABLE bitacora_jornadas (
+ id BIGINT PRIMARY KEY AUTO_INCREMENT,
+ practica_id BIGINT NOT NULL,
+ fecha DATE NOT NULL,
+ hora_inicio TIME NOT NULL,
+ hora_fin TIME NOT NULL,
+ curso VARCHAR(60) NOT NULL,
+ tipo VARCHAR(15) NOT NULL,
+ actividades VARCHAR(3000) NOT NULL,
+ reflexion VARCHAR(3000) NOT NULL DEFAULT '',
+ estado VARCHAR(12) NOT NULL DEFAULT 'REGISTRADA',
+ visado_por BIGINT NULL,
+ visado_en TIMESTAMP NULL,
+ comentario_colegio VARCHAR(1000) NOT NULL DEFAULT '',
+ comentario_ubb VARCHAR(2000) NOT NULL DEFAULT '',
+ comentario_ubb_por BIGINT NULL,
+ creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ CONSTRAINT fk_jornada_practica FOREIGN KEY (practica_id) REFERENCES practicas(id),
+ CONSTRAINT fk_jornada_visador FOREIGN KEY (visado_por) REFERENCES usuarios(id),
+ CONSTRAINT fk_jornada_comentador FOREIGN KEY (comentario_ubb_por) REFERENCES usuarios(id),
+ CONSTRAINT ck_jornada_tipo CHECK (tipo IN ('OBSERVACION','AYUDANTIA','CLASE','REUNION','OTRA')),
+ CONSTRAINT ck_jornada_estado CHECK (estado IN ('REGISTRADA','VISADA','OBSERVADA')),
+ CONSTRAINT ck_jornada_horas CHECK (hora_fin > hora_inicio),
+ INDEX ix_jornada_practica (practica_id,fecha)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

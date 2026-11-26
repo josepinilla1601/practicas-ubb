@@ -1,0 +1,44 @@
+@startuml 22-arquitectura
+' Arquitectura y despliegue del sistema Prácticas UBB.
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam componentStyle rectangle
+skinparam rectangle {
+  BorderColor #127562
+  BackgroundColor #FFFFFF
+}
+skinparam node {
+  BorderColor #9DB8B0
+  BackgroundColor #FBFCFC
+}
+skinparam database {
+  BorderColor #127562
+  BackgroundColor #E9F4EF
+}
+skinparam ArrowColor #17313B
+title Prácticas UBB — Arquitectura y despliegue
+
+actor "Coordinación\nProfesor UBB\nProfesor de colegio\nEstudiante" as Usuarios
+
+node "Navegador (Chrome, Edge, celular)" {
+  rectangle "Interfaz web (JavaScript)\nmódulos: panel, bitácora, ficha,\nrúbrica, calificaciones, calendario,\nasistente, dictado por voz, ayuda" as SPA
+}
+
+node "Servidor Pacheco (UBB) · Podman" {
+  rectangle "Proxy HTTPS de la universidad\n/bestpem → puerto 8019" as Proxy
+  node "Pod bestpem" {
+    rectangle "Aplicación Spring Boot (Java 21)\nSpring Security · Controladores REST\nServicios y reglas · PDFBox · Apache POI" as App
+    database "MySQL 8.4\n(volumen bestpem-mysql)\nmigraciones Flyway V1–V16" as BD
+  }
+}
+
+cloud "Google Gemini\n(gemini-flash-lite-latest)" as Gemini
+
+Usuarios --> SPA
+SPA --> Proxy : HTTPS · JSON\nsesión + CSRF
+Proxy --> App
+App --> BD : JDBC
+App --> Gemini : fragmentos del material\no documento a explicar
+SPA ..> SPA : reconocimiento de voz\ndel navegador (dictado)
+@enduml

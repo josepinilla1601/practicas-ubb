@@ -38,7 +38,7 @@ class PracticasIntegrationTest {
   @Autowired PasswordEncoder encoder;
  @BeforeEach void limpiarSoloBaseTest(){
   assertTrue(db.queryForObject("SELECT DATABASE()",String.class).endsWith("_test"),"Las pruebas necesitan una base exclusiva terminada en _test.");
-   for(String tabla:new String[]{"asistente_mensajes","material_fragmentos","materiales","evaluaciones_colegio","revisiones","documentos","requisitos_practica","practicas","usuarios","estudiantes","centros"})db.update("DELETE FROM "+tabla);
+   for(String tabla:new String[]{"rubricas_colegio","fichas_inscripcion","bitacora_jornadas","calificaciones","asistente_mensajes","material_fragmentos","materiales","evaluaciones_colegio","revisiones","documentos","requisitos_practica","practicas","usuarios","estudiantes","centros"})db.update("DELETE FROM "+tabla);
    db.update("INSERT INTO usuarios(correo,nombre,clave_hash,rol) VALUES('coordinacion@test.example','Pruebas','no-utilizada','COORDINADOR')");
    mvc=MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).defaultRequest(get("/").with(csrf())).build();
  }
@@ -386,6 +386,70 @@ class PracticasIntegrationTest {
   @Test void citasAFuentesInexistentesSeEliminan(){
    assertEquals("Dato [1] y otro dato.",AsistenteController.citasValidas("Dato [1] y otro dato [4].",1));
    assertEquals("Uno [1], dos [2].",AsistenteController.citasValidas("Uno [1], dos [2].",2));
+  }
+  JsonNode nota(long practica,String evaluacion,String nota,int ponderacion,int status,org.springframework.test.web.servlet.request.RequestPostProcessor quien)throws Exception{
+   var body=Map.of("evaluacion",evaluacion,"nota",new java.math.BigDecimal(nota),"ponderacion",ponderacion,"comentario","Comentario de prueba");
+   return json.readTree(mvc.perform(post("/api/practicas/"+practica+"/calificaciones").with(quien).contentType("application/json").content(json.writeValueAsBytes(body)))
+    .andExpect(status().is(status)).andReturn().getResponse().getContentAsString());
+  }
+  @Test void calificacionesInternasConPromedioPonderadoYPermisos()throws Exception{
+   long p=practica("NOTA-1","INI1",2026),otra=practica("NOTA-2","INI1",2026);
+   long estudiante=db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,p);
+   cuenta("nota-alumno@test.example","ESTUDIANTE",estudiante);
+   long profe=cuenta("nota-profe@test.example","PROFESOR_UBB",null);
+   long colegio=cuenta("nota-colegio@test.example","PROFESOR_COLEGIO",null);
+   mvc.perform(put("/api/practicas/"+p+"/docentes").contentType("application/json").content("{\"profesorUbbId\":"+profe+",\"profesorColegioId\":"+colegio+"}")).andExpect(status().isOk());
+   var alumno=user("nota-alumno@test.example").roles("ESTUDIANTE");
+   var profesor=user("nota-profe@test.example").roles("PROFESOR_UBB");
+   var colegioUser=user("nota-colegio@test.example").roles("PROFESOR_COLEGIO");
+   // El profesor UBB asignado registra notas; se calcula el promedio ponderado.
+   var r=nota(p,"Planificación",  "6.0",60,201,profesor);
+   assertEquals("EN_CURSO",r.get("situacion").asText());
+   r=nota(p,"Informe final","4.5",40,201,profesor);
+   assertEquals(5.4,r.get("promedio").asDouble(),0.001);
+   assertEquals(100,r.get("ponderacion").asInt());
+   assertEquals("APROBADA",r.get("situacion").asText());
+   // Validaciones: escala, decimales y ponderación total.
+   nota(p,"Extra","5.0",10,400,profesor);
+   nota(otra,"Fuera de escala","7.5",10,400,user("coordinacion@test.example").roles("COORDINADOR"));
+   nota(otra,"Dos decimales","5.55",10,400,user("coordinacion@test.example").roles("COORDINADOR"));
+   // Permisos: el estudiante solo consulta; colegio y profesores no asignados no ven ni registran.
+   mvc.perform(get("/api/practicas/"+p+"/calificaciones").with(alumno)).andExpect(status().isOk()).andExpect(jsonPath("$.notas.length()").value(2));
+   nota(p,"Autoevaluación","7.0",10,403,alumno);
+   mvc.perform(get("/api/practicas/"+p+"/calificaciones").with(colegioUser)).andExpect(status().isForbidden());
+   nota(otra,"Ajena","5.0",10,404,profesor);
+   // Solo quien la registró o la coordinación elimina una nota.
+   long idNota=r.get("notas").get(1).get("id").asLong();
+   mvc.perform(delete("/api/calificaciones/"+idNota).with(alumno)).andExpect(status().isForbidden());
+   mvc.perform(delete("/api/calificaciones/"+idNota).with(profesor)).andExpect(status().isOk()).andExpect(jsonPath("$.eliminada.evaluacion").value("Informe final"));
+   mvc.perform(get("/api/practicas/"+p+"/calificaciones").with(profesor)).andExpect(jsonPath("$.situacion").value("EN_CURSO"));
+   // Los indicadores muestran el promedio de cada práctica.
+   mvc.perform(get("/api/indicadores").with(profesor)).andExpect(jsonPath("$.practicas[0].promedio").value(6.0));
+  }
+  @Test void exportaPracticasAExcelSegunPermisos()throws Exception{
+   long p=practica("XLS-1","INI1",2026),otra=practica("XLS-2","INI1",2026);
+   long profe=cuenta("xls-profe@test.example","PROFESOR_UBB",null);
+   mvc.perform(put("/api/practicas/"+p+"/docentes").contentType("application/json").content("{\"profesorUbbId\":"+profe+"}")).andExpect(status().isOk());
+   subir(p,requisito(p),"entrega.pdf",pdf(),201);
+   nota(p,"Planificación","3.5",100,201,user("xls-profe@test.example").roles("PROFESOR_UBB"));
+   var resultado=mvc.perform(get("/api/exportar/practicas.xlsx")).andExpect(status().isOk())
+    .andExpect(header().string("Content-Disposition",org.hamcrest.Matchers.containsString(".xlsx"))).andReturn().getResponse().getContentAsByteArray();
+   try(var libro=new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(resultado))){
+    assertEquals(4,libro.getNumberOfSheets());
+    assertEquals("Resumen por práctica",libro.getSheetAt(0).getSheetName());
+    assertEquals(2,libro.getSheetAt(0).getLastRowNum());
+    assertEquals("Estudiante",libro.getSheetAt(0).getRow(0).getCell(0).getStringCellValue());
+    var notas=libro.getSheet("Calificaciones");
+    assertEquals(1,notas.getLastRowNum());
+    assertEquals(3.5,notas.getRow(1).getCell(5).getNumericCellValue(),0.001);
+    assertTrue(libro.getSheet("Requisitos").getLastRowNum()>=1);
+   }
+   // El profesor UBB solo exporta sus prácticas; el estudiante no puede exportar.
+   var suyo=mvc.perform(get("/api/exportar/practicas.xlsx").with(user("xls-profe@test.example").roles("PROFESOR_UBB"))).andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+   try(var libro=new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(suyo))){ assertEquals(1,libro.getSheetAt(0).getLastRowNum()); }
+   long estudiante=db.queryForObject("SELECT estudiante_id FROM practicas WHERE id=?",Long.class,otra);
+   cuenta("xls-alumno@test.example","ESTUDIANTE",estudiante);
+   mvc.perform(get("/api/exportar/practicas.xlsx").with(user("xls-alumno@test.example").roles("ESTUDIANTE"))).andExpect(status().isForbidden());
   }
   byte[] docx(String texto)throws Exception{
    var salida=new java.io.ByteArrayOutputStream();

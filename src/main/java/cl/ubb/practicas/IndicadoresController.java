@@ -9,7 +9,8 @@ import java.util.*;
 public class IndicadoresController {
     private final Acceso acceso;
     private final PracticasService servicio;
-    public IndicadoresController(Acceso acceso,PracticasService servicio) {this.acceso=acceso;this.servicio=servicio;}
+    private final org.springframework.jdbc.core.JdbcTemplate db;
+    public IndicadoresController(Acceso acceso,PracticasService servicio,org.springframework.jdbc.core.JdbcTemplate db) {this.acceso=acceso;this.servicio=servicio;this.db=db;}
     private static final List<String> ESTADOS=List.of("PENDIENTE","EN_REVISION","OBSERVADO","APROBADO");
 
     @GetMapping("/indicadores") public Map<String,Object> indicadores() {
@@ -40,6 +41,17 @@ public class IndicadoresController {
             if(requisitos==0)sinConfigurar++;else if(aprobados==requisitos)completas++;
         }
         totales.put("sin_configurar",sinConfigurar);totales.put("completas",completas);
+        // Calificaciones internas: promedio ponderado y situación de cada práctica.
+        Map<Long,List<ReglasCalificacion.Nota>> notas=new HashMap<>();
+        for(var c:db.queryForList("SELECT c.practica_id,c.nota,c.ponderacion FROM calificaciones c JOIN practicas p ON p.id=c.practica_id WHERE "+f.sql(),f.args()))
+            notas.computeIfAbsent(((Number)c.get("practica_id")).longValue(),k -> new ArrayList<>())
+                .add(new ReglasCalificacion.Nota((java.math.BigDecimal)c.get("nota"),((Number)c.get("ponderacion")).intValue()));
+        for(var e:porPractica.entrySet()) {
+            var lista=notas.getOrDefault(e.getKey(),List.of());
+            e.getValue().put("promedio",ReglasCalificacion.promedio(lista));
+            e.getValue().put("ponderacion_evaluada",ReglasCalificacion.ponderacionTotal(lista));
+            e.getValue().put("situacion_nota",ReglasCalificacion.situacion(lista));
+        }
         return Map.of("totales",totales,"practicas",porPractica.values());
     }
     private static void sumar(Map<String,Object> m,String k) { m.put(k,((Long)m.getOrDefault(k,0L))+1); }

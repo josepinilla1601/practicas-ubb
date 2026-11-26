@@ -85,6 +85,13 @@ th[aria-sort="ascending"] .sort-arrow::after { content:"↑"; opacity:1; }
 th[aria-sort="descending"] .sort-arrow::after { content:"↓"; opacity:1; }
 tr.no-results td { text-align:center; color:var(--muted); padding:22px; }
 
+/* ---------- Botones de formulario: compactos, centrados y lado a lado ---------- */
+.form-actions { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:10px; width:100%; flex-basis:100%; margin-top:8px; }
+.form-actions .button { width:auto !important; min-width:150px; margin:0 !important; padding:10px 22px; }
+.tools .form-actions { margin-top:2px; }
+.table-tools .excel { padding:7px 14px; font-size:12px; min-width:0; }
+.table-tools .excel .icon { width:15px; height:15px; }
+
 /* ---------- Cifras con explicación ---------- */
 .stat[data-tip] { position:relative; cursor:help; }
 .stat[data-tip]:hover::after, .stat[data-tip]:focus::after { content:attr(data-tip); position:absolute; left:12px; right:12px; top:calc(100% + 6px); z-index:20; background:#17343c; color:#fff; font-size:12px; line-height:1.4; padding:9px 11px; border-radius:9px; box-shadow:0 10px 24px rgba(0,0,0,.18); }
@@ -139,6 +146,19 @@ kbd { display:inline-grid; place-items:center; min-width:22px; height:22px; padd
 .dictado-estado { display:block; margin-top:6px; font-size:12px; color:var(--red); font-weight:600; }
 .chat-widget-form .dictado-estado { position:absolute; left:0; bottom:calc(100% + 4px); background:#fff; padding:2px 6px; border-radius:6px; white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis; }
 
+/* ---------- Calificaciones y exportación ---------- */
+.nota { display:inline-grid; place-items:center; min-width:42px; padding:3px 8px; border-radius:8px; background:var(--pale); color:var(--green); font-weight:800; }
+.nota.roja, .grade-summary strong.roja { background:#fff0ed; color:var(--red); }
+.grade-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-bottom:18px; }
+.grade-summary > div { border:1px solid var(--line); border-radius:12px; padding:14px 16px; background:#fbfcfc; }
+.grade-summary span { display:block; font-size:12px; color:var(--muted); margin-bottom:6px; }
+.grade-summary strong { display:inline-block; font-size:26px; letter-spacing:-.5px; border-radius:8px; padding:0 6px; }
+.grade-summary .pill { display:inline-block; font-size:13px; }
+.grade-form { margin-top:20px; padding-top:18px; border-top:1px solid #edf1f1; }
+.grade-form h3 { font-size:15px; margin:0 0 10px; }
+.button.excel { display:inline-flex; align-items:center; gap:8px; background:#1d6f42; border-color:#1d6f42; }
+@media(max-width:700px) { .grade-summary { grid-template-columns:1fr; } }
+
 /* ---------- Asistente con IA ---------- */
 .chat-attach { border:1px solid var(--line); background:#fff; color:var(--green); border-radius:12px; width:42px; display:grid; place-items:center; flex:none; }
 .chat-attach:hover { background:var(--pale); }
@@ -151,6 +171,7 @@ kbd { display:inline-grid; place-items:center; min-width:22px; height:22px; padd
   .help-button > span:last-child { display:none; }
   .help-button { padding:4px; }
   .table-count { margin-left:0; width:100%; }
+  .table-tools .excel { margin-left:auto; }
 }
 @media(max-width:700px) {
   .attention-text { flex:1 1 calc(100% - 60px); }
@@ -161,3 +182,4 @@ kbd { display:inline-grid; place-items:center; min-width:22px; height:22px; padd
 @media(prefers-reduced-motion:reduce) {
   .loader::after, .skeleton .sk, .spinner, .toast, .modal-backdrop, .help-panel, form.highlight, .mic.grabando { animation:none; }
 }
+.card-head .excel { padding:7px 14px; font-size:12px; min-width:0; }

@@ -20,9 +20,9 @@ actions['toggle-user']=async target=>{
   await send(`/usuarios/${target.dataset.id}/activo`,{activo:activar},'PATCH');await load();await go('usuarios');
   notice(activar?'Cuenta activada.':'Cuenta desactivada.',false,{texto:'Deshacer',fn:async()=>{await send(`/usuarios/${target.dataset.id}/activo`,{activo:!activar},'PATCH');await go('usuarios');notice('Cambio deshecho.');}});
 };
-detailSections.push(async data=>{
+detailSections.push(Object.assign(async data=>{
   if(!coord())return '';
   const users=await api('/usuarios');const p=data.practica;
   return card('Asignar docentes',`<form id="assignment-form">${selectField('Profesor UBB','profesorUbbId',options(users.filter(u=>u.activo&&u.rol==='PROFESOR_UBB'),u=>u.nombre),true,p.profesor_ubb_id)}${selectField('Profesor de colegio','profesorColegioId',options(users.filter(u=>u.activo&&u.rol==='PROFESOR_COLEGIO'),u=>u.nombre),false,p.profesor_colegio_id)}${button('Guardar asignación','type="submit"')}<p class="hint">Dejar el colegio vacío elimina esa asignación. La documentación se conserva.</p></form>`);
-});
+},{orden:90,pestana:'inscripcion'}));
 detailBindings.push(id=>onForm('#assignment-form',async f=>{const d=formData(f);d.profesorUbbId=Number(d.profesorUbbId);d.profesorColegioId=d.profesorColegioId?Number(d.profesorColegioId):null;await send(`/practicas/${id}/docentes`,d,'PUT');await saved('detalle',id);}));
