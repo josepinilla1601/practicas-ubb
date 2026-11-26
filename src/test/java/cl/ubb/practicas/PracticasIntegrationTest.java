@@ -38,7 +38,7 @@ class PracticasIntegrationTest {
   @Autowired PasswordEncoder encoder;
  @BeforeEach void limpiarSoloBaseTest(){
   assertTrue(db.queryForObject("SELECT DATABASE()",String.class).endsWith("_test"),"Las pruebas necesitan una base exclusiva terminada en _test.");
-   for(String tabla:new String[]{"calificaciones","asistente_mensajes","material_fragmentos","materiales","evaluaciones_colegio","revisiones","documentos","requisitos_practica","practicas","usuarios","estudiantes","centros"})db.update("DELETE FROM "+tabla);
+   for(String tabla:new String[]{"rubricas_colegio","fichas_inscripcion","bitacora_jornadas","calificaciones","asistente_mensajes","material_fragmentos","materiales","evaluaciones_colegio","revisiones","documentos","requisitos_practica","practicas","usuarios","estudiantes","centros"})db.update("DELETE FROM "+tabla);
    db.update("INSERT INTO usuarios(correo,nombre,clave_hash,rol) VALUES('coordinacion@test.example','Pruebas','no-utilizada','COORDINADOR')");
    mvc=MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).defaultRequest(get("/").with(csrf())).build();
  }
@@ -435,7 +435,7 @@ class PracticasIntegrationTest {
    var resultado=mvc.perform(get("/api/exportar/practicas.xlsx")).andExpect(status().isOk())
     .andExpect(header().string("Content-Disposition",org.hamcrest.Matchers.containsString(".xlsx"))).andReturn().getResponse().getContentAsByteArray();
    try(var libro=new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(resultado))){
-    assertEquals(3,libro.getNumberOfSheets());
+    assertEquals(4,libro.getNumberOfSheets());
     assertEquals("Resumen por práctica",libro.getSheetAt(0).getSheetName());
     assertEquals(2,libro.getSheetAt(0).getLastRowNum());
     assertEquals("Estudiante",libro.getSheetAt(0).getRow(0).getCell(0).getStringCellValue());

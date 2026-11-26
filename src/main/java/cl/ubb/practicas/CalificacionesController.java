@@ -30,14 +30,7 @@ public class CalificacionesController {
     @PostMapping("/practicas/{id}/calificaciones") @ResponseStatus(HttpStatus.CREATED) @Transactional
     public Map<String,Object> registrar(@PathVariable long id,@Valid @RequestBody Calificacion datos) {
         acceso.exigir("COORDINADOR","PROFESOR_UBB");acceso.practica(id);
-        String error=ReglasCalificacion.validarNota(datos.nota());
-        if(error!=null)throw Problema.invalido(error);
-        db.queryForMap("SELECT id FROM practicas WHERE id=? FOR UPDATE",id);
-        int actual=Optional.ofNullable(db.queryForObject("SELECT SUM(ponderacion) FROM calificaciones WHERE practica_id=?",Integer.class,id)).orElse(0);
-        if(actual+datos.ponderacion()>100)
-            throw Problema.invalido("Las ponderaciones ya suman "+actual+" %. Con esta evaluación llegarían a "+(actual+datos.ponderacion())+" %, y el total no puede superar 100 %. Puedes usar hasta "+(100-actual)+" %.");
-        db.update("INSERT INTO calificaciones(practica_id,evaluacion,nota,ponderacion,comentario,autor_id) VALUES(?,?,?,?,?,?)",
-            id,datos.evaluacion().strip(),datos.nota(),datos.ponderacion(),datos.comentario()==null?"":datos.comentario().strip(),acceso.id());
+        insertar(db,id,datos.evaluacion(),datos.nota(),datos.ponderacion(),datos.comentario(),acceso.id());
         var r=new LinkedHashMap<String,Object>(resumen(db,id));
         r.put("mensaje","Nota registrada.");
         return r;
@@ -55,6 +48,18 @@ public class CalificacionesController {
         db.update("DELETE FROM calificaciones WHERE id=?",id);
         // Se devuelven los datos para que la interfaz pueda ofrecer "Deshacer".
         return Map.of("mensaje","Nota eliminada.","eliminada",Map.of("evaluacion",c.get("evaluacion"),"nota",c.get("nota"),"ponderacion",c.get("ponderacion"),"comentario",c.get("comentario")));
+    }
+
+    /** Registra una nota validando escala, decimales y que la ponderación total no supere 100 %. Debe llamarse en una transacción. */
+    static void insertar(JdbcTemplate db,long practica,String evaluacion,BigDecimal nota,int ponderacion,String comentario,long autor) {
+        String error=ReglasCalificacion.validarNota(nota);
+        if(error!=null)throw Problema.invalido(error);
+        db.queryForMap("SELECT id FROM practicas WHERE id=? FOR UPDATE",practica);
+        int actual=Optional.ofNullable(db.queryForObject("SELECT SUM(ponderacion) FROM calificaciones WHERE practica_id=?",Integer.class,practica)).orElse(0);
+        if(actual+ponderacion>100)
+            throw Problema.invalido("Las ponderaciones ya suman "+actual+" %. Con esta evaluación llegarían a "+(actual+ponderacion)+" %, y el total no puede superar 100 %. Puedes usar hasta "+(100-actual)+" %.");
+        db.update("INSERT INTO calificaciones(practica_id,evaluacion,nota,ponderacion,comentario,autor_id) VALUES(?,?,?,?,?,?)",
+            practica,evaluacion.strip(),nota,ponderacion,comentario==null?"":comentario.strip(),autor);
     }
 
     /** Notas de una práctica con su promedio ponderado y situación. También lo usan los indicadores y la exportación. */

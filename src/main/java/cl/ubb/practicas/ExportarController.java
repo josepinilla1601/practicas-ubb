@@ -25,6 +25,8 @@ public class ExportarController {
     public ExportarController(JdbcTemplate db,Acceso acceso,PracticasService servicio) {this.db=db;this.acceso=acceso;this.servicio=servicio;}
 
     private static final Map<String,String> ESTADOS=Map.of("PENDIENTE","Pendiente","EN_REVISION","En revisión","OBSERVADO","Corrección solicitada","APROBADO","Aprobado");
+    private static final Map<String,String> TIPOS_JORNADA=Map.of("OBSERVACION","Observación","AYUDANTIA","Ayudantía","CLASE","Clase realizada","REUNION","Reunión","OTRA","Otra");
+    private static final Map<String,String> ESTADOS_JORNADA=Map.of("REGISTRADA","Por visar","VISADA","Visada","OBSERVADA","Observada");
     private static final Map<String,String> SITUACION_NOTA=Map.of("SIN_NOTAS","Sin notas","EN_CURSO","En curso","APROBADA","Aprobada","REPROBADA","Reprobada");
 
     @GetMapping("/exportar/practicas.xlsx")
@@ -51,7 +53,8 @@ public class ExportarController {
                 "Requisitos","Aprobados","En revisión","Corrección solicitada","Pendientes","Fuera de plazo","Avance","Situación","Promedio","Ponderación evaluada","Situación de la nota"));
             var hojaReq=hoja(libro,estilos,"Requisitos",List.of("Estudiante","Identificador","Asignatura","Período","Requisito","Plazo","Estado","Versiones entregadas","Fuera de plazo"));
             var hojaNotas=hoja(libro,estilos,"Calificaciones",List.of("Estudiante","Identificador","Asignatura","Período","Evaluación","Nota","Ponderación","Comentario","Registrada por","Fecha"));
-            int fr=1,fq=1,fn=1;
+            var hojaBit=hoja(libro,estilos,"Bitácora",List.of("Estudiante","Identificador","Asignatura","Período","Fecha","Inicio","Término","Horas","Curso","Tipo","Estado","Visada por"));
+            int fr=1,fq=1,fn=1,fb=1;
             for(var p:practicas) {
                 long pid=id(p);String periodo=p.get("anio")+"-"+p.get("semestre");
                 var reqs=requisitos.getOrDefault(pid,List.of());
@@ -89,8 +92,16 @@ public class ExportarController {
                     texto(q,7,n.get("comentario"));texto(q,8,n.get("autor"));
                     var c=q.createCell(9);c.setCellValue(((java.sql.Timestamp)n.get("creado_en")).toLocalDateTime().toLocalDate());c.setCellStyle(estilos.fecha);
                 }
+                for(var j:db.queryForList("SELECT j.fecha,TIME_FORMAT(j.hora_inicio,'%H:%i') inicio,TIME_FORMAT(j.hora_fin,'%H:%i') fin,TIMESTAMPDIFF(MINUTE,j.hora_inicio,j.hora_fin) minutos,j.curso,j.tipo,j.estado,u.nombre visador FROM bitacora_jornadas j LEFT JOIN usuarios u ON u.id=j.visado_por WHERE j.practica_id=? ORDER BY j.fecha,j.hora_inicio",pid)) {
+                    var q=hojaBit.createRow(fb++);
+                    texto(q,0,p.get("estudiante"));texto(q,1,p.get("identificador"));texto(q,2,p.get("asignatura"));texto(q,3,periodo);
+                    var c=q.createCell(4);c.setCellValue(ReglasSeguimiento.fecha(j.get("fecha")));c.setCellStyle(estilos.fecha);
+                    texto(q,5,j.get("inicio"));texto(q,6,j.get("fin"));numero(q,7,((Number)j.get("minutos")).doubleValue()/60,estilos.nota);
+                    texto(q,8,j.get("curso"));texto(q,9,TIPOS_JORNADA.getOrDefault(String.valueOf(j.get("tipo")),String.valueOf(j.get("tipo"))));
+                    texto(q,10,ESTADOS_JORNADA.getOrDefault(String.valueOf(j.get("estado")),String.valueOf(j.get("estado"))));texto(q,11,j.get("visador")==null?"—":j.get("visador"));
+                }
             }
-            terminar(resumen,18,fr);terminar(hojaReq,9,fq);terminar(hojaNotas,10,fn);
+            terminar(resumen,18,fr);terminar(hojaReq,9,fq);terminar(hojaNotas,10,fn);terminar(hojaBit,12,fb);
             libro.write(salida);
             String nombre="practicas-ubb-"+LocalDate.now(ReglasSeguimiento.ZONA)+".xlsx";
             return ResponseEntity.ok()
