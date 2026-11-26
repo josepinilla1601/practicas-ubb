@@ -40,3 +40,13 @@ Todas las cuentas de demostración usan la contraseña **`Practicas2026demo`**.
 - Estudiante: "¿Qué tengo pendiente?", "¿Cuáles son mis plazos?"
 - Cualquier rol: "¿Cuál es la asistencia mínima?", "¿Cómo se entrega el informe final?", "¿Qué es el proyecto de intervención?"
 - Para mostrar que no inventa: "¿Cuánto cuesta el estacionamiento?" (responde que no tiene respaldo).
+
+## Calificaciones de demostración
+
+Después de cargar los datos, agrega notas de ejemplo (los profesores UBB las registran en sus prácticas):
+
+```
+node scripts/datos-demo/calificaciones.mjs
+```
+
+Quedan: Camila 6,0 (60 % evaluado), Valentina 6,7 (aprobada), Tomás 6,0 (aprobado), Diego 5,5 (50 %), Benjamín 3,8 (40 %, en rojo) y Fernanda 5,0 (30 %).
