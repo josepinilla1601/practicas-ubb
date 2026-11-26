@@ -98,4 +98,4 @@ detailSections.push(Object.assign(async data=>{
     (b.jornadas.length?`<div class="jornadas">${b.jornadas.slice(0,5).map(j=>tarjetaJornada(j)).join('')}</div>${b.jornadas.length>5?`<p class="hint">Se muestran las 5 más recientes.</p>`:''}`:empty('Sin jornadas registradas',role('ESTUDIANTE')?'Registra tu primera jornada desde "Bitácora" en el menú.':'El practicante aún no registra jornadas.'))+
     (role('ESTUDIANTE')?`<p>${button('Ir a mi bitácora','type="button" data-page="bitacora"',true)}</p>`:'');
   return card('Bitácora de práctica',cuerpo);
-},{orden:40}));
+},{orden:40,pestana:'bitacora'}));

@@ -24,7 +24,7 @@ detailSections.push(Object.assign(async data=>{
     <div class="rubrica-nota">Nota sugerida: <strong id="rubrica-sugerida">—</strong> <small>(se calcula al marcar los 12 criterios)</small></div>
     ${button('Registrar rúbrica','type="submit"')}</form>`:'';
   return card('Evaluación de desempeño (Marco para la Buena Enseñanza)',resultados+formulario);
-},{orden:60}));
+},{orden:60,pestana:'evaluacion'}));
 detailBindings.push(id=>{
   const form=$('#rubrica-form');if(!form)return;
   const leerNiveles=()=>{const n={};for(const c of rubricaDef.criterios){const v=form.querySelector(`input[name="${c.codigo}"]:checked`);if(v)n[c.codigo]=Number(v.value);}return n;};

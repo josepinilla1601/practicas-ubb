@@ -114,3 +114,32 @@
   .criterio { flex-direction:column; align-items:flex-start; }
   .dominio { grid-template-columns:minmax(0,1fr) 80px 30px; }
 }
+
+/* ---------- Pestañas del seguimiento de una práctica ---------- */
+.tabs { display:flex; gap:4px; flex-wrap:wrap; border-bottom:2px solid var(--line); margin:4px 0 22px; }
+.tabs [role="tab"] { display:inline-flex; align-items:center; gap:8px; border:0; background:none; padding:12px 18px; font:inherit; font-size:14px; font-weight:600; color:var(--muted); border-bottom:3px solid transparent; margin-bottom:-2px; border-radius:8px 8px 0 0; }
+.tabs [role="tab"]:hover { color:var(--ink); background:var(--pale); }
+.tabs [role="tab"][aria-selected="true"] { color:var(--green); border-bottom-color:var(--green); background:#fff; }
+.tab-badge { display:inline-grid; place-items:center; min-width:20px; height:20px; padding:0 6px; border-radius:10px; background:var(--red); color:#fff; font-size:11px; font-weight:700; }
+@media(max-width:700px) { .tabs { flex-wrap:nowrap; overflow-x:auto; } .tabs [role="tab"] { padding:10px 12px; white-space:nowrap; } }
+
+/* ---------- Campanita de avisos ---------- */
+.bell { position:relative; }
+.bell-button { position:relative; display:grid; place-items:center; width:40px; height:40px; border-radius:50%; border:1px solid var(--line); background:#fff; color:var(--ink); }
+.bell-button:hover, .bell-button[aria-expanded="true"] { background:var(--pale); border-color:#c3ddd2; }
+.bell-badge { position:absolute; top:-4px; right:-4px; min-width:20px; height:20px; padding:0 5px; border-radius:10px; background:var(--red); color:#fff; font-size:11px; font-weight:700; display:grid; place-items:center; border:2px solid #fff; }
+.bell-menu { position:absolute; right:0; top:calc(100% + 8px); z-index:60; width:min(380px,calc(100vw - 32px)); max-height:min(480px,70vh); overflow:auto; background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:0 20px 44px rgba(23,49,59,.18); }
+.bell-head { display:flex; justify-content:space-between; align-items:baseline; padding:14px 16px; border-bottom:1px solid #edf1f1; position:sticky; top:0; background:#fff; }
+.bell-head small { color:var(--muted); font-size:12px; }
+.bell-list { list-style:none; margin:0; padding:6px; display:grid; gap:2px; }
+.bell-item { display:flex; gap:10px; align-items:flex-start; width:100%; text-align:left; border:0; background:none; padding:10px; border-radius:10px; font:inherit; color:var(--ink); }
+.bell-item:hover, .bell-item:focus-visible { background:var(--pale); }
+.bell-item strong { display:block; font-size:13px; line-height:1.35; }
+.bell-item small { display:block; font-size:12px; color:var(--muted); margin-top:2px; }
+.bell-item .attention-icon { width:34px; height:34px; border-radius:9px; flex:none; display:grid; place-items:center; }
+.bell-item .attention-icon.danger { background:#fff0ed; color:#9f2929; }
+.bell-item .attention-icon.warn { background:#fff1d8; color:#906416; }
+.bell-item .attention-icon.info { background:#eef0ff; color:#40368b; }
+.bell-empty { display:grid; place-items:center; gap:6px; padding:26px; color:var(--green); }
+.bell-empty p { margin:0; color:var(--muted); font-size:13px; }
+@media(max-width:860px) { .bell-menu { position:fixed; left:16px; right:16px; top:72px; width:auto; } }

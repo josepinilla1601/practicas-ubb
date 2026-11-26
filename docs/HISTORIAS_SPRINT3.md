@@ -33,6 +33,8 @@ Funciones construidas después del Sprint 2. Cada historia se puede copiar como 
 | S3-22 | Mensajes de error claros y por campo | Todos | 2 | Todos los formularios |
 | S3-23 | Publicar el sistema en el servidor Pacheco | Equipo | 5 | — |
 | S3-24 | Exportar cualquier lista a Excel | Coordinación y docentes | 3 | Botón en cada lista |
+| S3-25 | Avisos de pendientes con campanita | Todos | 3 | Encabezado (campanita) |
+| S3-26 | Seguimiento de la práctica en pestañas | Todos | 2 | Práctica → pestañas |
 
 ---
 
@@ -181,6 +183,28 @@ Funciones construidas después del Sprint 2. Cada historia se puede copiar como 
 **Criterios de aceptación:** estudiantes, centros y cuentas solo los exporta la coordinación; la bitácora la exporta cada rol con lo que puede ver (el estudiante, su propio diario de campo).
 
 **Técnico:** `GET /api/exportar/{estudiantes|centros|usuarios|bitacora}.xlsx?q=`. Prueba: `exportarListasAExcelConBusquedaYPermisos`.
+
+---
+
+### S3-25 · Avisos de pendientes con campanita
+**Como** usuario, **quiero** ver en un solo lugar lo que tengo pendiente, **para** no tener que revisar práctica por práctica.
+
+**Qué hace:** arriba, junto a "Ayuda", hay una campanita con un número rojo. Al pulsarla muestra los avisos ordenados por urgencia, y cada uno lleva directo a la práctica y la pestaña donde se resuelve:
+- **Estudiante:** correcciones solicitadas, requisitos vencidos o que vencen en 7 días, jornadas observadas y ficha pendiente o devuelta.
+- **Profesor UBB:** entregas por revisar.
+- **Profesor de colegio:** jornadas por visar, fichas por confirmar y practicantes sin evaluar con la rúbrica.
+- **Coordinación:** fichas por aprobar, prácticas sin requisitos y entregas por revisar.
+
+**Criterios de aceptación:** cada cuenta solo ve avisos de sus prácticas autorizadas; los avisos desaparecen cuando se resuelve lo pendiente; si no hay nada, dice "Todo al día".
+
+**Técnico:** `GET /api/notificaciones` (calculado con los datos existentes, sin tablas nuevas). Prueba: `avisosDeLaCampanitaSegunElRol`.
+
+### S3-26 · Seguimiento de la práctica en pestañas
+**Como** profesor sin experiencia en informática, **quiero** que la información de una práctica esté separada en pestañas, **para** encontrar lo que busco sin bajar por una página muy larga.
+
+**Qué hace:** la página de cada práctica se divide en *Entregas* (requisitos, entregas, revisión y plazos), *Bitácora*, *Evaluación y notas* (evaluación del colegio, rúbrica y calificaciones) e *Inscripción* (ficha y docentes asignados). Un número rojo en la pestaña indica los pendientes. El profesor de colegio entra directo a la Bitácora. Se puede navegar con las flechas del teclado.
+
+**Criterios de aceptación:** solo se muestran las pestañas que tienen contenido para el rol; al volver a la misma práctica se mantiene la pestaña elegida; los avisos y el calendario abren la pestaña correspondiente.
 
 ---
 

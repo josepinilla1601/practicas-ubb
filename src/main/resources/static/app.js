@@ -386,12 +386,34 @@ function requirementTable(data) {
 function documentsTable(data) {
   return card('Archivos entregados',data.documentos.length?`<div class="scroll"><table><thead><tr><th>ARCHIVO</th><th>REQUISITO</th><th>FECHA</th></tr></thead><tbody>${data.documentos.map(d=>`<tr><td><a href="api/documentos/${d.id}/descarga">${e(d.nombre_original)}</a></td><td>${e(d.requisito)}</td><td>${e(dateText(d.cargado_en))}</td></tr>`).join('')}</tbody></table></div>`:empty('Todavía no hay archivos'));
 }
+// Pestañas del seguimiento de una práctica (heurística 8: cada cosa en su lugar, sin una página interminable).
+const pestanasDetalle=[['entregas','Entregas','clipboard'],['bitacora','Bitácora','notebook'],['evaluacion','Evaluación y notas','check'],['inscripcion','Inscripción','file']];
+// Pestaña inicial según el rol: el profesor de colegio trabaja sobre todo con la bitácora y la evaluación.
+const pestanaInicial=()=>role('PROFESOR_COLEGIO')?'bitacora':'entregas';
+function mostrarPestana(nombre,enfocar=false) {
+  const tabs=[...document.querySelectorAll('#app [role="tab"]')];if(!tabs.length)return;
+  if(!tabs.some(t=>t.dataset.tab===nombre && !t.hidden))nombre=tabs.find(t=>!t.hidden)?.dataset.tab;
+  state.detalleTab=nombre;
+  tabs.forEach(t=>{const on=t.dataset.tab===nombre;t.setAttribute('aria-selected',String(on));t.tabIndex=on?0:-1;if(on && enfocar)t.focus();});
+  document.querySelectorAll('#app [role="tabpanel"]').forEach(p=>{p.hidden=p.dataset.tab!==nombre;});
+}
 registerPage('detalle','',allRoles,async id=>{
   const data=await api(`/practicas/${id}/seguimiento`);state.detail=data;const p=data.practica;
+  if(state.detalleId!==String(id)){state.detalleId=String(id);state.detalleTab=state.detalleTabPedida||pestanaInicial();}
+  state.detalleTabPedida=null;
+  const secciones=[...detailSections].sort((a,b)=>(a.orden??50)-(b.orden??50));
+  const html=await Promise.all(secciones.map(render=>render(data)));
+  const panel={entregas:`<div class="split wide">${uploadForm(data)}${requirementTable(data)}</div>`+documentsTable(data),bitacora:'',evaluacion:'',inscripcion:''};
+  secciones.forEach((s,i)=>{panel[s.pestana||'entregas']+=html[i];});
+  // Números junto a cada pestaña para saber dónde hay algo pendiente.
+  const pendientes={entregas:role('ESTUDIANTE')?data.requisitos.filter(r=>r.estado==='PENDIENTE' || r.estado==='OBSERVADO').length:role('COORDINADOR','PROFESOR_UBB')?data.documentos.filter(d=>d.ultima && !d.decision).length:0};
+  const tabs=pestanasDetalle.filter(([k])=>panel[k].trim()).map(([k,l,i])=>`<button type="button" role="tab" id="tab-${k}" data-tab="${k}" aria-controls="panel-${k}" aria-selected="false" tabindex="-1">${icon(i,16)}<span>${l}</span>${pendientes[k]?`<b class="tab-badge" title="Pendientes">${pendientes[k]}</b>`:''}</button>`).join('');
   return button('← Volver a prácticas','data-page="practicas"',true)+heading(p.estudiante,`${p.asignatura} · ${p.anio}-${p.semestre}`,progress(p))+
     `<div class="meta"><div>Centro<strong>${e(p.centro||'No corresponde')}</strong></div><div>Profesor responsable<strong>${e(p.profesor_responsable)}</strong></div></div>`+
-    `<div class="split wide">${uploadForm(data)}${requirementTable(data)}</div>`+documentsTable(data)+(await Promise.all([...detailSections].sort((a,b)=>(a.orden??50)-(b.orden??50)).map(render=>render(data)))).join('');
+    `<div class="tabs" role="tablist" aria-label="Secciones de la práctica">${tabs}</div>`+
+    pestanasDetalle.filter(([k])=>panel[k].trim()).map(([k])=>`<div role="tabpanel" id="panel-${k}" data-tab="${k}" aria-labelledby="tab-${k}" hidden>${panel[k]}</div>`).join('');
 },id=>{
+  mostrarPestana(state.detalleTab||pestanaInicial());
   onForm('#upload-form',async form=>{
     const file=form.elements.archivo.files[0];
     if(file.size>10*1024*1024){marcarCampo(form.elements.archivo,'El archivo pesa más de 10 MB. Comprímelo o guárdalo como PDF e inténtalo de nuevo.');throw new Error('El archivo supera el máximo de 10 MB.');}
@@ -416,11 +438,20 @@ registerPage('cuenta','Cambiar contraseña',allRoles,()=>heading('Cambiar contra
 });
 document.addEventListener('keydown',event=>{
   if(event.key==='Escape' && !$('#profile-menu').hidden){closeProfileMenu();$('#profile-button').focus();}
+  // Flechas izquierda y derecha para moverse entre pestañas.
+  const tab=event.target.closest?.('[role="tab"]');
+  if(tab && (event.key==='ArrowRight' || event.key==='ArrowLeft')){
+    const tabs=[...document.querySelectorAll('#app [role="tab"]')];const i=tabs.indexOf(tab);
+    mostrarPestana(tabs[(i+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length].dataset.tab,true);event.preventDefault();
+  }
 });
 document.addEventListener('click',async event=>{
   if(!event.target.closest('#profile'))closeProfileMenu();
   const target=event.target.closest('button');if(!target)return;
   if(target.id==='profile-button'){toggleProfileMenu();return;}
+  if(target.getAttribute('role')==='tab'){mostrarPestana(target.dataset.tab);return;}
+  // Un botón puede pedir abrir una práctica en una pestaña concreta (por ejemplo, desde un aviso).
+  if(target.dataset.detail && target.dataset.tab)state.detalleTabPedida=target.dataset.tab;
   if(target.dataset.group){toggleGroup(target.dataset.group);return;}
   if(target.hasAttribute('data-toggle-pass')){
     const input=target.parentElement.querySelector('input');const show=input.type==='password';

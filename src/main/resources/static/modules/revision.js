@@ -35,7 +35,7 @@ detailSections.push(Object.assign(data=>{
   if(!role('COORDINADOR','PROFESOR_UBB'))return '';
   const porRevisar=data.documentos.filter(d=>d.ultima && !d.decision);
   return card('Revisar entregas',porRevisar.length?`<form id="review-form">${selectField('Versión por revisar','documentoId',porRevisar.map(d=>[d.id,`${d.requisito} · versión ${d.version} · ${d.nombre_original}`]))}${selectField('Decisión','decision',[['APROBADO','Aprobar'],['OBSERVADO','Solicitar corrección']])}<label class="field">Comentario para el estudiante<span class="req-when" id="comment-req" hidden> * (obligatorio al solicitar una corrección)</span><textarea name="comentario" maxlength="2000" placeholder="Ejemplo: Falta la bibliografía y la firma del profesor colaborador."></textarea></label>${button('Registrar revisión','type="submit"')}<p class="hint">Antes de guardar te pediremos confirmar. Si te equivocas, podrás deshacer la revisión.</p></form>`:empty('No hay entregas por revisar','Las versiones más recientes ya tienen revisión.'));
-},{orden:20}));
+},{orden:20,pestana:'entregas'}));
 detailBindings.push(id=>{
   const form=$('#review-form');if(!form)return;
   // El comentario pasa a ser obligatorio solo al solicitar una corrección.

@@ -26,7 +26,7 @@ detailSections.push(Object.assign(async data=>{
   if(coord() && f.estado==='CONFIRMADA')acciones.push(button('Aprobar ficha',`type="button" data-action="ficha-decision" data-accion="APROBAR" data-id="${id}"`));
   if((role('PROFESOR_COLEGIO') && f.estado==='ENVIADA') || (coord() && ['ENVIADA','CONFIRMADA'].includes(f.estado)))acciones.push(button('Devolver con comentario',`type="button" data-action="ficha-decision" data-accion="DEVOLVER" data-id="${id}"`,true));
   return card('Ficha de inscripción',`<div class="ficha-head"><span class="pill ${css}">${label}</span></div>${pasosFicha(f)}${aviso}${editable?'':datos}${formulario}${acciones.length?`<div class="table-actions">${acciones.join('')}</div>`:''}`);
-},{orden:10}));
+},{orden:10,pestana:'inscripcion'}));
 detailBindings.push(id=>onForm('#ficha-form',async f=>{
   const d=formData(f);d.horasSemanales=Number(d.horasSemanales);
   const r=await send(`/practicas/${id}/ficha`,d,'PUT');await go('detalle',id);notice(r.mensaje);
@@ -48,6 +48,6 @@ pageHooks.push(async page=>{
     let f;try{f=await api(`/practicas/${p.id}/ficha`);}catch{continue;}
     if(!['SIN_FICHA','BORRADOR','DEVUELTA'].includes(f.estado) || state.page!=='mipanel')continue;
     const texto=f.estado==='DEVUELTA'?'Tu ficha de inscripción fue devuelta: revisa el comentario y corrígela.':'Completa y envía tu ficha de inscripción (curso, días, horario y fechas en el centro).';
-    $('#app .heading')?.insertAdjacentHTML('afterend',`<section class="attention-card"><div class="attention-head">${icon('file',20)}<h2>Ficha de inscripción · ${e(p.asignatura)}</h2></div><ul class="attention-list"><li class="attention-item warn"><span class="attention-icon">${icon('edit',20)}</span><div class="attention-text"><strong>${e(texto)}</strong></div><button type="button" class="button small" data-detail="${p.id}">Completar ficha ${icon('arrow',14)}</button></li></ul></section>`);
+    $('#app .heading')?.insertAdjacentHTML('afterend',`<section class="attention-card"><div class="attention-head">${icon('file',20)}<h2>Ficha de inscripción · ${e(p.asignatura)}</h2></div><ul class="attention-list"><li class="attention-item warn"><span class="attention-icon">${icon('edit',20)}</span><div class="attention-text"><strong>${e(texto)}</strong></div><button type="button" class="button small" data-detail="${p.id}" data-tab="inscripcion">Completar ficha ${icon('arrow',14)}</button></li></ul></section>`);
   }
 });

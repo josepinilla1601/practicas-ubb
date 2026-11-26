@@ -20,7 +20,7 @@ requirementTable=data=>card('Requisitos y plazos',data.configurado?`<p class="hi
 detailSections.push(Object.assign(data=>{
   if(!role('COORDINADOR','PROFESOR_UBB') || !data.configurado)return '';
   return card('Actualizar un plazo',`<form id="deadline-form" class="tools">${selectField('Requisito','requisitoId',options(data.requisitos,r=>r.nombre))}${field('Fecha límite (vacío elimina el plazo)','fechaLimite','date',false,10)}${button('Guardar plazo','type="submit"')}</form>`);
-},{orden:25}));
+},{orden:25,pestana:'entregas'}));
 detailBindings.push(id=>{
   const form=$('#deadline-form');if(!form)return;
   form.elements.requisitoId.addEventListener('change',()=>{form.elements.fechaLimite.value=state.detail.requisitos.find(r=>Number(r.id)===Number(form.elements.requisitoId.value))?.fecha_limite||'';});

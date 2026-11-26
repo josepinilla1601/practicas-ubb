@@ -204,6 +204,33 @@ class Sprint3IntegrationTest {
         assertEquals(1,hojaExportada(get("/api/exportar/bitacora.xlsx").with(colegioUser)).getLastRowNum());
     }
 
+    List<String> avisos(RequestPostProcessor quien) throws Exception {
+        var r=json.readTree(mvc.perform(get("/api/notificaciones").with(quien)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        List<String> textos=new ArrayList<>();r.get("avisos").forEach(a->textos.add(a.get("texto").asText()+"|"+a.get("pestana").asText()));return textos;
+    }
+    @Test void avisosDeLaCampanitaSegunElRol() throws Exception {
+        // Estudiante: ficha pendiente y jornada observada.
+        assertTrue(avisos(alumno).contains("Completa y envía tu ficha de inscripción|inscripcion"),avisos(alumno).toString());
+        enviar(post("/api/practicas/"+practica+"/bitacora"),jornada(LocalDate.now().minusDays(1).toString(),"08:00","10:00"),201,alumno);
+        // Profesor de colegio: jornada por visar.
+        assertTrue(avisos(colegioUser).stream().anyMatch(a->a.startsWith("1 jornada por visar de Ana Rojas Pérez|bitacora")),avisos(colegioUser).toString());
+        long id=db.queryForObject("SELECT id FROM bitacora_jornadas WHERE practica_id=?",Long.class,practica);
+        enviar(post("/api/bitacora/"+id+"/visado"),Map.of("decision","OBSERVADA","comentario","Falta el curso."),200,colegioUser);
+        assertTrue(avisos(alumno).stream().anyMatch(a->a.startsWith("Observaron tu jornada")),avisos(alumno).toString());
+        assertTrue(avisos(colegioUser).stream().noneMatch(a->a.contains("por visar")));
+        // Profesor UBB: entrega por revisar. Otro estudiante no ve avisos de esta práctica.
+        mvc.perform(multipart("/api/practicas/"+practica+"/requisitos/"+db.queryForObject("SELECT MIN(id) FROM requisitos_practica WHERE practica_id=?",Long.class,practica)+"/documentos")
+            .file(new MockMultipartFile("archivo","x.pdf","application/pdf","%PDF-1.4\nprueba\n%%EOF".getBytes())).with(alumno)).andExpect(status().isCreated());
+        assertTrue(avisos(profeUser).contains("1 entrega por revisar de Ana Rojas Pérez|entregas"),avisos(profeUser).toString());
+        assertTrue(avisos(otroAlumno).stream().noneMatch(a->a.contains("Observaron")));
+        // Coordinación: ficha confirmada por aprobar.
+        enviar(put("/api/practicas/"+practica+"/ficha"),ficha(),200,alumno);
+        enviar(post("/api/practicas/"+practica+"/ficha/enviar"),Map.of(),200,alumno);
+        assertTrue(avisos(colegioUser).contains("Confirma la ficha de inscripción de Ana Rojas Pérez|inscripcion"));
+        enviar(post("/api/practicas/"+practica+"/ficha/decision"),Map.of("accion","CONFIRMAR"),200,colegioUser);
+        assertTrue(avisos(user("coordinacion@test.example").roles("COORDINADOR")).contains("Aprueba la ficha de inscripción de Ana Rojas Pérez|inscripcion"));
+    }
+
     @Test void coordinacionVePanelDelEstudianteEnSoloLectura() throws Exception {
         mvc.perform(get("/api/estudiantes/"+estudiante+"/panel")).andExpect(status().isOk())
             .andExpect(jsonPath("$.estudiante.nombres").value("Ana")).andExpect(jsonPath("$.practicas.length()").value(1));

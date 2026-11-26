@@ -44,6 +44,7 @@ registerPage('mipanel','Mi panel',['ESTUDIANTE'],async()=>panelEstudiante(await 
 // Al llegar desde "Entregar", enfoca el formulario y deja elegido el requisito.
 pageHooks.push(page=>{
   if(page!=='detalle' || !state.focusUpload)return;
+  if(typeof mostrarPestana==='function')mostrarPestana('entregas');
   const form=$('#upload-form');const pedido=state.focusUpload;state.focusUpload=null;if(!form)return;
   if(pedido!==true && form.elements.requisitoId.querySelector(`option[value="${pedido}"]`))form.elements.requisitoId.value=pedido;
   form.scrollIntoView({behavior:'smooth',block:'center'});form.classList.add('highlight');
