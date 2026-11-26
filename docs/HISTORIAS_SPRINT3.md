@@ -32,6 +32,7 @@ Funciones construidas después del Sprint 2. Cada historia se puede copiar como 
 | S3-21 | Buscar, filtrar y ordenar tablas | Todos | 3 | Todas las tablas |
 | S3-22 | Mensajes de error claros y por campo | Todos | 2 | Todos los formularios |
 | S3-23 | Publicar el sistema en el servidor Pacheco | Equipo | 5 | — |
+| S3-24 | Exportar cualquier lista a Excel | Coordinación y docentes | 3 | Botón en cada lista |
 
 ---
 
@@ -171,6 +172,15 @@ Funciones construidas después del Sprint 2. Cada historia se puede copiar como 
 **Criterios de aceptación:** cada profesor exporta solo sus prácticas; el estudiante no puede exportar; respeta los filtros de la página.
 
 **Técnico:** `GET /api/exportar/practicas.xlsx` (Apache POI). Prueba: `exportaPracticasAExcelSegunPermisos`.
+
+### S3-24 · Exportar cualquier lista a Excel
+**Como** coordinación o docente, **quiero** descargar en Excel las listas de estudiantes, centros, cuentas y bitácora, **para** trabajar los datos fuera del sistema o archivarlos.
+
+**Qué hace:** cada lista tiene el mismo botón *Exportar a Excel*, a la derecha de su tabla. Si se escribió algo en "Buscar en esta tabla", el Excel trae solo esos resultados (sin importar mayúsculas ni tildes). Cada archivo tiene encabezados con filtro, fechas y horas con formato, y el nombre incluye la fecha de descarga.
+
+**Criterios de aceptación:** estudiantes, centros y cuentas solo los exporta la coordinación; la bitácora la exporta cada rol con lo que puede ver (el estudiante, su propio diario de campo).
+
+**Técnico:** `GET /api/exportar/{estudiantes|centros|usuarios|bitacora}.xlsx?q=`. Prueba: `exportarListasAExcelConBusquedaYPermisos`.
 
 ---
 

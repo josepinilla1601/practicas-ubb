@@ -111,6 +111,80 @@ public class ExportarController {
         }
     }
 
+    /**
+     * S3-24: exporta a Excel las demás listas del sistema (estudiantes, centros, cuentas y bitácora).
+     * "q" deja solo las filas que contienen ese texto (lo mismo que se escribió en "Buscar en esta tabla").
+     */
+    @GetMapping("/exportar/{lista}.xlsx")
+    public ResponseEntity<byte[]> exportarLista(@PathVariable String lista,@RequestParam(required=false) String q) throws IOException {
+        List<String> columnas;List<List<Object>> filas=new ArrayList<>();String hoja;
+        switch(lista) {
+            case "estudiantes" -> {
+                acceso.exigir("COORDINADOR");hoja="Estudiantes";
+                columnas=List.of("Identificador","Nombres","Apellidos","Correo","Prácticas","Cuenta de acceso");
+                for(var e:db.queryForList("""
+                    SELECT e.identificador,e.nombres,e.apellidos,e.correo,(SELECT COUNT(*) FROM practicas p WHERE p.estudiante_id=e.id) practicas,
+                      (SELECT CASE WHEN u.activo THEN 'Activa' ELSE 'Desactivada' END FROM usuarios u WHERE u.estudiante_id=e.id) cuenta
+                    FROM estudiantes e ORDER BY e.apellidos,e.nombres"""))
+                    filas.add(Arrays.asList(e.get("identificador"),e.get("nombres"),e.get("apellidos"),e.get("correo"),e.get("practicas"),e.get("cuenta")==null?"Sin cuenta":e.get("cuenta")));
+            }
+            case "centros" -> {
+                acceso.exigir("COORDINADOR");hoja="Centros de práctica";
+                columnas=List.of("Establecimiento","Comuna","Dirección","Contacto","Correo","Teléfono","Prácticas");
+                for(var c:db.queryForList("SELECT c.*,(SELECT COUNT(*) FROM practicas p WHERE p.centro_id=c.id) practicas FROM centros c ORDER BY c.nombre"))
+                    filas.add(Arrays.asList(c.get("nombre"),c.get("comuna"),c.get("direccion"),c.get("contacto"),c.get("correo"),c.get("telefono"),c.get("practicas")));
+            }
+            case "usuarios" -> {
+                acceso.exigir("COORDINADOR");hoja="Cuentas y roles";
+                columnas=List.of("Nombre","Correo de acceso","Rol","Estado","Estudiante vinculado");
+                var roles=Map.of("COORDINADOR","Coordinación","PROFESOR_UBB","Profesor UBB","PROFESOR_COLEGIO","Profesor de colegio","ESTUDIANTE","Estudiante");
+                for(var u:db.queryForList("SELECT u.nombre,u.correo,u.rol,u.activo,e.identificador FROM usuarios u LEFT JOIN estudiantes e ON e.id=u.estudiante_id ORDER BY u.rol,u.nombre"))
+                    filas.add(Arrays.asList(u.get("nombre"),u.get("correo"),roles.getOrDefault(String.valueOf(u.get("rol")),String.valueOf(u.get("rol"))),
+                        Boolean.TRUE.equals(u.get("activo"))?"Activa":"Desactivada",u.get("identificador")==null?"—":u.get("identificador")));
+            }
+            case "bitacora" -> {
+                hoja="Bitácora";var f=acceso.filtroPracticas();
+                columnas=List.of("Estudiante","Asignatura","Fecha","Inicio","Término","Horas","Curso","Tipo","Actividades","Reflexión","Estado","Visada por","Comentario del colegio","Retroalimentación UBB");
+                for(var j:db.queryForList("""
+                    SELECT CONCAT(e.nombres,' ',e.apellidos) estudiante,a.nombre asignatura,j.fecha,TIME_FORMAT(j.hora_inicio,'%H:%i') inicio,TIME_FORMAT(j.hora_fin,'%H:%i') fin,
+                      TIMESTAMPDIFF(MINUTE,j.hora_inicio,j.hora_fin) minutos,j.curso,j.tipo,j.actividades,j.reflexion,j.estado,v.nombre visador,j.comentario_colegio,j.comentario_ubb
+                    FROM bitacora_jornadas j JOIN practicas p ON p.id=j.practica_id JOIN estudiantes e ON e.id=p.estudiante_id JOIN asignaturas a ON a.id=p.asignatura_id
+                    LEFT JOIN usuarios v ON v.id=j.visado_por WHERE"""+" "+f.sql()+" ORDER BY e.apellidos,j.fecha,j.hora_inicio",f.args()))
+                    filas.add(Arrays.asList(j.get("estudiante"),j.get("asignatura"),ReglasSeguimiento.fecha(j.get("fecha")),j.get("inicio"),j.get("fin"),((Number)j.get("minutos")).doubleValue()/60,
+                        j.get("curso"),TIPOS_JORNADA.getOrDefault(String.valueOf(j.get("tipo")),String.valueOf(j.get("tipo"))),j.get("actividades"),j.get("reflexion"),
+                        ESTADOS_JORNADA.getOrDefault(String.valueOf(j.get("estado")),String.valueOf(j.get("estado"))),j.get("visador")==null?"—":j.get("visador"),j.get("comentario_colegio"),j.get("comentario_ubb")));
+            }
+            default -> throw Problema.noExiste("No existe esa lista para exportar.");
+        }
+        if(q!=null && !q.isBlank()) {
+            String buscado=BuscadorMaterial.sinTildes(q.strip());
+            filas.removeIf(fila -> !BuscadorMaterial.sinTildes(fila.stream().map(v -> v==null?"":String.valueOf(v)).reduce("",(a,b)->a+" "+b)).contains(buscado));
+        }
+        return libroSimple(hoja,columnas,filas,lista);
+    }
+
+    /** Libro de una hoja con encabezado, filtros y formatos (números con un decimal y fechas). */
+    private ResponseEntity<byte[]> libroSimple(String nombreHoja,List<String> columnas,List<List<Object>> filas,String archivo) throws IOException {
+        try(var libro=new XSSFWorkbook();var salida=new ByteArrayOutputStream()) {
+            var estilos=new Estilos(libro);var hoja=hoja(libro,estilos,nombreHoja,columnas);int r=1;
+            for(var fila:filas) {
+                var row=hoja.createRow(r++);
+                for(int i=0;i<fila.size();i++) {
+                    Object v=fila.get(i);
+                    if(v instanceof LocalDate d){var c=row.createCell(i);c.setCellValue(d);c.setCellStyle(estilos.fecha);}
+                    else if(v instanceof Double n)numero(row,i,n,estilos.nota);
+                    else if(v instanceof Number n)numero(row,i,n.doubleValue(),null);
+                    else texto(row,i,v);
+                }
+            }
+            terminar(hoja,columnas.size(),r);
+            libro.write(salida);
+            String nombre=archivo+"-"+LocalDate.now(ReglasSeguimiento.ZONA)+".xlsx";
+            return ResponseEntity.ok().contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION,ContentDisposition.attachment().filename(nombre).build().toString()).body(salida.toByteArray());
+        }
+    }
+
     /** Estilos del libro: encabezado verde, notas con un decimal (rojas bajo 4,0), porcentajes y fechas. */
     private static final class Estilos {
         final CellStyle encabezado,nota,notaRoja,porcentaje,fecha,alerta,textoAlerta;

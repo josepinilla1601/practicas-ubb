@@ -179,6 +179,31 @@ class Sprint3IntegrationTest {
         mvc.perform(get("/api/calendario?anio=2026&mes=13").with(alumno)).andExpect(status().isBadRequest());
     }
 
+    org.apache.poi.ss.usermodel.Sheet hojaExportada(org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder req) throws Exception {
+        var bytes=mvc.perform(req).andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        return new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(bytes)).getSheetAt(0);
+    }
+    @Test void exportarListasAExcelConBusquedaYPermisos() throws Exception {
+        var est=hojaExportada(get("/api/exportar/estudiantes.xlsx"));
+        assertEquals("Identificador",est.getRow(0).getCell(0).getStringCellValue());
+        assertEquals(2,est.getLastRowNum());
+        // La búsqueda se aplica sin importar mayúsculas ni tildes.
+        var filtrada=hojaExportada(get("/api/exportar/estudiantes.xlsx").param("q","perez"));
+        assertEquals(1,filtrada.getLastRowNum());
+        assertEquals("Ana",filtrada.getRow(1).getCell(1).getStringCellValue());
+        assertEquals(1,hojaExportada(get("/api/exportar/centros.xlsx")).getLastRowNum());
+        assertTrue(hojaExportada(get("/api/exportar/usuarios.xlsx")).getLastRowNum()>=5);
+        mvc.perform(get("/api/exportar/estudiantes.xlsx").with(profeUser)).andExpect(status().isForbidden());
+        mvc.perform(get("/api/exportar/inventado.xlsx")).andExpect(status().isNotFound());
+        // Bitácora: cada uno exporta lo que puede ver.
+        enviar(post("/api/practicas/"+practica+"/bitacora"),jornada(LocalDate.now().minusDays(1).toString(),"08:00","10:30"),201,alumno);
+        var propia=hojaExportada(get("/api/exportar/bitacora.xlsx").with(alumno));
+        assertEquals(1,propia.getLastRowNum());
+        assertEquals(2.5,propia.getRow(1).getCell(5).getNumericCellValue(),0.001);
+        assertEquals(0,hojaExportada(get("/api/exportar/bitacora.xlsx").with(otroAlumno)).getLastRowNum());
+        assertEquals(1,hojaExportada(get("/api/exportar/bitacora.xlsx").with(colegioUser)).getLastRowNum());
+    }
+
     @Test void coordinacionVePanelDelEstudianteEnSoloLectura() throws Exception {
         mvc.perform(get("/api/estudiantes/"+estudiante+"/panel")).andExpect(status().isOk())
             .andExpect(jsonPath("$.estudiante.nombres").value("Ana")).andExpect(jsonPath("$.practicas.length()").value(1));

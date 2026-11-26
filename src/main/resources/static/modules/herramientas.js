@@ -80,3 +80,33 @@ registerPage('vistaprevia','',['COORDINADOR'],async()=>{
   return `<div class="preview-banner">${icon('eye',18)}<span>Estás viendo el panel de <strong>${e(data.estudiante.nombres)} ${e(data.estudiante.apellidos)}</strong> tal como lo ve el estudiante. Es solo de lectura.</span>${button('Volver a estudiantes','type="button" data-page="estudiantes"',true)}</div><div class="solo-lectura">${panelEstudiante(data)}</div>`;
 });
 pageHooks.push(page=>{ if(page==='vistaprevia')$('#breadcrumb').textContent='Vista como estudiante'; });
+
+/* ---------- S3-24: Exportar a Excel en las demás listas ---------- */
+// Mismo botón y mismo lugar que en Prácticas: a la derecha de la barra de la tabla.
+// Si se escribió algo en "Buscar en esta tabla", el Excel trae solo esos resultados.
+const listasExportables={estudiantes:['COORDINADOR'],centros:['COORDINADOR'],usuarios:['COORDINADOR'],bitacora:allRoles};
+pageHooks.push(page=>{
+  const roles=listasExportables[page];if(!roles || !role(...roles))return;
+  setTimeout(()=>{
+    if(state.page!==page || $('#app [data-action="exportar-lista"]'))return;
+    const boton=`<button type="button" class="button excel" data-action="exportar-lista" data-lista="${page}" title="Descarga esta lista en Excel. Si buscaste algo en la tabla, solo trae esos resultados.">${icon('chart',16)} Exportar a Excel</button>`;
+    const barra=$('#app .card .table-tools');
+    if(barra){barra.insertAdjacentHTML('beforeend',boton);return;}
+    // Sin barra (lista corta o bitácora en tarjetas): va en el título de la tarjeta principal.
+    const tarjeta=[...document.querySelectorAll('#app .card')].find(c=>c.querySelector('table, .jornadas'));
+    tarjeta?.querySelector('.card-head')?.insertAdjacentHTML('beforeend',boton);
+  },0);
+});
+actions['exportar-lista']=async t=>{
+  const q=t.closest('.card')?.querySelector('.table-search input')?.value.trim()||'';
+  notice('Preparando el Excel… la descarga comenzará en unos segundos.');
+  setLoading(1);
+  try {
+    const r=await fetch(`api/exportar/${t.dataset.lista}.xlsx${q?`?q=${encodeURIComponent(q)}`:''}`);
+    if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.mensaje||'No se pudo generar el Excel. Inténtalo de nuevo.');}
+    const nombre=(r.headers.get('content-disposition')||'').match(/filename="?([^"]+)"?/)?.[1]||`${t.dataset.lista}.xlsx`;
+    const url=URL.createObjectURL(await r.blob());
+    const a=document.createElement('a');a.href=url;a.download=nombre;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),5000);
+  } finally { setLoading(-1); }
+};
