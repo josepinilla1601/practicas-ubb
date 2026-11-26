@@ -55,6 +55,24 @@ function notice(text, error=false, accion=null) {
   if(!error)setTimeout(close,accion?9000:5000);
 }
 const clearErrors=()=>$('#toasts')?.querySelectorAll('.toast.error').forEach(x=>x.remove());
+// Ventana para escribir un texto o número antes de una acción (observar una jornada, devolver una ficha, etc.).
+// Devuelve el texto escrito o null si la persona cancela.
+function pedirTexto({titulo,mensaje,etiqueta,aceptar='Guardar',obligatorio=true,tipo='textarea',min,max,valor=''}) {
+  return new Promise(resolve=>{
+    const previo=document.activeElement;
+    const capa=document.createElement('div');capa.className='modal-backdrop';
+    const campo=tipo==='textarea'?`<textarea id="modal-input" maxlength="2000" ${obligatorio?'required':''}>${e(valor)}</textarea>`:`<input id="modal-input" type="${tipo}" ${min!=null?`min="${min}"`:''} ${max!=null?`max="${max}"`:''} value="${e(valor)}" ${obligatorio?'required':''}>`;
+    capa.innerHTML=`<form class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" novalidate><h2 id="modal-title">${e(titulo)}</h2>${mensaje?`<p>${e(mensaje)}</p>`:''}<label class="field">${e(etiqueta)}${obligatorio?req:''}${campo}</label><div class="modal-actions"><button type="button" class="button secondary" data-modal="no">Cancelar</button><button type="submit" class="button">${e(aceptar)}</button></div></form>`;
+    const form=capa.querySelector('form');const input=capa.querySelector('#modal-input');
+    const cerrar=v=>{capa.remove();document.removeEventListener('keydown',teclas,true);previo?.focus?.();resolve(v);};
+    const teclas=ev=>{if(ev.key==='Escape'){ev.stopPropagation();cerrar(null);}};
+    form.addEventListener('submit',ev=>{ev.preventDefault();limpiarCampo(input);if(!input.checkValidity()){marcarCampo(input,mensajeValidez(input));input.focus();return;}cerrar(input.value.trim());});
+    capa.addEventListener('click',ev=>{if(ev.target===capa || ev.target.closest('[data-modal="no"]'))cerrar(null);});
+    document.addEventListener('keydown',teclas,true);document.body.appendChild(capa);
+    if(typeof agregarMicrofonos==='function')agregarMicrofonos(capa);
+    input.focus();
+  });
+}
 // Ventana de confirmación propia (heurística 5: prevenir errores). Devuelve true si la persona confirma.
 function confirmar({titulo,mensaje,aceptar='Confirmar',peligro=false}) {
   return new Promise(resolve=>{
@@ -189,18 +207,22 @@ const iconPaths={
   mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/>',
   clip:'<path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/>',
   spark:'<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>',
+  notebook:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3v18M12 8h4M12 12h4"/>',
+  list:'<path d="M9 6h11M9 12h11M9 18h11"/><path d="m4 6 1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/>',
+  file:'<path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
+  upload:'<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>',
 };
 const icon=(name,size=18)=>`<svg class="icon" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[name]||''}</svg>`;
 // Tarjeta de cifra. "ayuda" explica qué cuenta la cifra (aparece al pasar el mouse o al enfocarla con el teclado).
 const statTile=(iconName,value,label,ayuda='')=>`<div class="stat" ${ayuda?`tabindex="0" data-tip="${e(ayuda)}" aria-label="${e(`${value||0} ${label}. ${ayuda}`)}"`:''}>${icon(iconName,20)}<div class="number">${value||0}</div><div class="label">${e(label)}${ayuda?` <span class="tip-mark" aria-hidden="true">?</span>`:''}</div></div>`;
-const pageIcons={mipanel:'home',resumen:'home',indicadores:'chart',practicas:'clipboard',estudiantes:'users',centros:'school',plantillas:'calendar',materiales:'book',asistente:'chat',usuarios:'shield'};
+const pageIcons={mipanel:'home',resumen:'home',indicadores:'chart',calendario:'calendar',practicas:'clipboard',bitacora:'notebook',estudiantes:'users',centros:'school',plantillas:'list',materiales:'book',asistente:'chat',usuarios:'shield'};
 // Se ejecutan al iniciar o cerrar sesión y en cada cambio de página (por ejemplo, el asistente flotante).
 const sessionHooks=[];
 const runSessionHooks=()=>sessionHooks.forEach(hook=>{try{hook();}catch(err){console.error(err);}});
 // Secciones del menú lateral. Las páginas de la cuenta personal van en el menú de perfil, no aquí.
 const navGroups=[
-  ['Inicio',['mipanel','resumen','indicadores']],
-  ['Gestión académica',['practicas','estudiantes','centros','plantillas']],
+  ['Inicio',['mipanel','resumen','indicadores','calendario']],
+  ['Gestión académica',['practicas','bitacora','estudiantes','centros','plantillas']],
   ['Apoyo docente',['materiales','asistente']],
   ['Administración',['usuarios']],
 ];
@@ -363,7 +385,7 @@ registerPage('detalle','',allRoles,async id=>{
   const data=await api(`/practicas/${id}/seguimiento`);state.detail=data;const p=data.practica;
   return button('← Volver a prácticas','data-page="practicas"',true)+heading(p.estudiante,`${p.asignatura} · ${p.anio}-${p.semestre}`,progress(p))+
     `<div class="meta"><div>Centro<strong>${e(p.centro||'No corresponde')}</strong></div><div>Profesor responsable<strong>${e(p.profesor_responsable)}</strong></div></div>`+
-    `<div class="split wide">${uploadForm(data)}${requirementTable(data)}</div>`+documentsTable(data)+(await Promise.all(detailSections.map(render=>render(data)))).join('');
+    `<div class="split wide">${uploadForm(data)}${requirementTable(data)}</div>`+documentsTable(data)+(await Promise.all([...detailSections].sort((a,b)=>(a.orden??50)-(b.orden??50)).map(render=>render(data)))).join('');
 },id=>{
   onForm('#upload-form',async form=>{
     const file=form.elements.archivo.files[0];

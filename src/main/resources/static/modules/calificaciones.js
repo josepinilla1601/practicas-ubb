@@ -7,7 +7,7 @@ const notaTexto=n=>n===null || n===undefined || n===''?'—':Number(n).toFixed(1
 const notaPill=n=>n===null || n===undefined?'<span class="muted">—</span>':`<span class="nota ${Number(n)<4?'roja':''}">${notaTexto(n)}</span>`;
 const puedeCalificar=()=>role('COORDINADOR','PROFESOR_UBB');
 
-detailSections.push(async data=>{
+detailSections.push(Object.assign(async data=>{
   if(!role('COORDINADOR','PROFESOR_UBB','ESTUDIANTE'))return '';
   const c=await api(`/practicas/${data.practica.id}/calificaciones`);
   const [label,css]=situacionNota[c.situacion]||['—',''];
@@ -23,7 +23,7 @@ detailSections.push(async data=>{
   else if(restante<=0)pie='<p class="hint">Ya se evaluó el 100 %. Para corregir una nota, elimínala y vuelve a registrarla.</p>';
   else pie=`<form id="grade-form" class="grade-form"><h3>Registrar una nota</h3>${field('Evaluación (por ejemplo: Planificación de clase)','evaluacion','text',true,150)}<div class="row"><label class="field">Nota (1,0 a 7,0)${req}<input name="nota" type="number" min="1" max="7" step="0.1" inputmode="decimal" required placeholder="5,5"></label><label class="field">Ponderación (%)${req}<input name="ponderacion" type="number" min="1" max="${restante}" step="1" required value="${restante}"></label></div><label class="field">Comentario para el estudiante (opcional)<textarea name="comentario" maxlength="2000" placeholder="Ejemplo: buena secuencia didáctica; mejorar el cierre de la clase."></textarea></label>${button('Registrar nota','type="submit"')}<p class="hint">Escala de 1,0 a 7,0: se aprueba con 4,0. Quedan ${restante} % por evaluar.</p></form>`;
   return card('Calificaciones internas',resumen+tabla+pie);
-});
+},{orden:70}));
 detailBindings.push(id=>onForm('#grade-form',async f=>{
   const d=formData(f);
   const r=await send(`/practicas/${id}/calificaciones`,{evaluacion:d.evaluacion,nota:Number(d.nota),ponderacion:Number(d.ponderacion),comentario:d.comentario});

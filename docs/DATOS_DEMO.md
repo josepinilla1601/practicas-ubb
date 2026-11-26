@@ -50,3 +50,13 @@ node scripts/datos-demo/calificaciones.mjs
 ```
 
 Quedan: Camila 6,0 (60 % evaluado), Valentina 6,7 (aprobada), Tomás 6,0 (aprobado), Diego 5,5 (50 %), Benjamín 3,8 (40 %, en rojo) y Fernanda 5,0 (30 %).
+
+## Datos del Sprint 3 (bitácora, fichas y rúbrica)
+
+Después de las calificaciones, carga jornadas de bitácora, fichas de inscripción y una rúbrica:
+
+```
+COORD_EMAIL=... COORD_PASSWORD=... node scripts/datos-demo/sprint3.mjs
+```
+
+Quedan: Camila con 4 jornadas (3 visadas y 1 observada, con retroalimentación), ficha aprobada y rúbrica MBE con nota sugerida 5,5; Benjamín con ficha enviada al colegio; Fernanda con ficha devuelta. Sin `COORD_*`, la ficha de Camila queda confirmada esperando aprobación.
