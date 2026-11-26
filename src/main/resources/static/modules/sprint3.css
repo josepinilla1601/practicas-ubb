@@ -74,7 +74,18 @@
 .cal-leyenda { display:flex; flex-wrap:wrap; gap:12px; margin-top:12px; font-size:12px; color:var(--muted); }
 .cal-leyenda span { display:inline-flex; gap:6px; align-items:center; }
 .eventos { list-style:none; padding:0; margin:0; display:grid; gap:10px; }
-.eventos li { display:grid; grid-template-columns:92px auto minmax(0,1fr) auto; gap:10px; align-items:center; border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+/* Columnas fijas (fecha, etiqueta, título, botón) para que todos los títulos partan en la misma línea. */
+.eventos li { display:grid; grid-template-columns:96px 150px minmax(0,1fr) auto; column-gap:14px; align-items:center; border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+.eventos li > .pill { justify-self:start; white-space:nowrap; }
+/* Si la lista es angosta, la etiqueta va arriba del título (siempre alineada) y el botón a la derecha. */
+.eventos { container-type:inline-size; }
+@container (max-width:620px) {
+  .eventos li { grid-template-columns:88px minmax(0,1fr) auto; row-gap:6px; }
+  .eventos li > .evento-fecha { grid-row:1 / span 2; }
+  .eventos li > .pill { grid-column:2; grid-row:1; }
+  .eventos li > div { grid-column:2; grid-row:2; }
+  .eventos li > .button { grid-column:3; grid-row:1 / span 2; }
+}
 .eventos li small { display:block; color:var(--muted); font-size:12px; }
 .evento-fecha { font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; }
 
@@ -92,7 +103,7 @@
 }
 @media(max-width:700px) {
   .dia { min-height:48px; padding:4px; }
-  .eventos li { grid-template-columns:1fr; gap:6px; }
+  .eventos li { grid-template-columns:1fr; row-gap:6px; }
   .criterio { flex-direction:column; align-items:flex-start; }
   .dominio { grid-template-columns:minmax(0,1fr) 80px 30px; }
 }
