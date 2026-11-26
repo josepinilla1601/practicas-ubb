@@ -46,6 +46,11 @@ mkdir -p "$HOME/.config/systemd/user"
 cp bestpem-respaldo.service bestpem-respaldo.timer "$HOME/.config/systemd/user/"
 systemctl --user daemon-reload
 systemctl --user enable --now bestpem-respaldo.timer
-systemctl --user restart bestpem-db.service bestpem-app.service
+# Primero la base de datos y después la aplicación, en órdenes separadas: reiniciarlas juntas hace que
+# systemd cancele ambos trabajos (la app depende de la base de datos) y las deja detenidas.
+systemctl --user start bestpem-pod.service
+systemctl --user restart bestpem-db.service
+sleep 15
+systemctl --user restart bestpem-app.service
 echo "Servicios iniciados. Revisa con: systemctl --user status bestpem-app  |  podman logs -f bestpem-app"
 echo "Respaldo diario activo. Próxima ejecución: systemctl --user list-timers bestpem-respaldo.timer"
